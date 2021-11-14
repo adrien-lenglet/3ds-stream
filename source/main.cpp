@@ -30,6 +30,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <chrono>
+#include "../../win-driver/src/Img.hpp"
+
 #define SOC_ALIGN       0x1000
 #define SOC_BUFFERSIZE  0x100000
 
@@ -69,10 +72,16 @@ void socShutdown() {
 
 }
 
+//static char rbuf[4000000];
+
 int main(int argc, char **argv)
 {
 	gfxInitDefault();
-	consoleInit(GFX_TOP, NULL);
+	consoleInit(GFX_BOTTOM, NULL);
+	gfxSetDoubleBuffering(GFX_TOP, false);
+	u16 fbw, fbh;
+	u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &fbw, &fbh);
+	printf("FB: %u, %u\n", fbw, fbh);
 
 	SOC_buffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
 
@@ -113,6 +122,13 @@ int main(int argc, char **argv)
 		failExit("listen: %d %s\n", errno, strerror(errno));
 	}
 
+	auto frame = Img::create();
+	auto e = Img::Enc::create();
+	size_t cmp_size = frame.cmp_size(e);
+	auto cmp = frame.alloc_cmp(e);
+	//size_t bcount = frame.blk_count(e);
+	//size_t bpx_count = e.blk_px_count;
+
 	while (true) {
 		printf("Waiting for client.. You won't be able to exit the app until someone connects (blocking socket).\n");
 		while (true) {
@@ -130,28 +146,73 @@ int main(int argc, char **argv)
 			gspWaitForVBlank();*/
 		}
 
+		consoleClear();
+
+		/*auto bef = svcGetSystemTick();
+		size_t rec = 0;
+		size_t it = 0;
+		float clock = 0.0;*/
+
+		auto base = svcGetSystemTick();
+
+		uint32_t frame_ndx = 0;
 		while (aptMainLoop()) {
 			hidScanInput();
 
-			auto kDown = hidKeysDown();
-			if (kDown & KEY_START)
+			auto kDown = hidKeysHeld();
+			if ((kDown & KEY_START) && (kDown & KEY_SELECT))
 				goto done;
 			circlePosition pos;
 			hidCircleRead(&pos);
-			char buf[8];
+			char buf[8 + sizeof(frame_ndx)];
 			reinterpret_cast<decltype(kDown)&>(buf[0]) = kDown;
 			reinterpret_cast<decltype(pos.dx)&>(buf[4]) = pos.dx;
 			reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
+			reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
 			if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
 				printf("Client disconnected.\n");
 				break;
 			}
 
-			/*gfxFlushBuffers();
+			size_t sf = 0;
+			while (true) {
+				auto g = read(csock, cmp + sf, cmp_size - sf);
+				if (g < 0) {
+					printf("Client disconnected (%d).\n", g);
+					goto cdisc;
+				}
+				sf += static_cast<size_t>(g);
+				if (sf >= cmp_size)
+					break;
+			}
+			frame_ndx++;
+			if (frame_ndx % 15 == 0) {
+				auto now = svcGetSystemTick();
+				auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
+				printf("frame: %lu, %g FPS\n", frame_ndx, static_cast<double>(frame_ndx + 1) / delta);
+			}
+			frame.dcmp(e, cmp);
+			frame.flip(fb);
+			//std::memcpy(fb, frame.get_data(), 400 * 240 * 3);
+
+			/*rec += read(csock, rbuf, sizeof(rbuf));
+			if (it++ == 256) {
+
+				auto now = svcGetSystemTick();
+				auto delta = static_cast<float>(now - bef) / (CPU_TICKS_PER_MSEC * 1000.0);
+				bef = now;
+				clock += delta;
+				//printf("rate: %g (%u), time: %g\n", static_cast<float>(rec) / delta, rec, clock);
+				it = 0;
+				rec = 0;
+			}*/
+
+			gfxFlushBuffers();
 			gfxSwapBuffers();
-			gspWaitForVBlank();*/
-			svcSleepThread(1000000);
+			/*gspWaitForVBlank();*/
+			//svcSleepThread(1000000);
 		}
+		cdisc:
 		close(csock);
 		csock = -1;
 	}
