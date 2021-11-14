@@ -157,6 +157,54 @@ public:
 		fclose(f);
 	}
 
+	struct px {
+		uint8_t data[3];
+
+		px(const uint8_t *data)
+		{
+			for (size_t i = 0; i < 3; i++)
+				this->data[i] = data[i];
+		}
+
+		size_t dst(const px &other) const
+		{
+			size_t res = 0;
+			for (size_t i = 0; i < 3; i++) {
+				size_t d = data[i] - other.data[i];
+				res += d * d;
+			}
+			return res;
+		}
+	};
+
+	struct pxd {
+		double data[3];
+		size_t i = 0;
+
+		pxd(void)
+		{
+			for (size_t i = 0; i < 3; i++)
+				data[i] = 0.0;
+		}
+
+		void inc(const px &p)
+		{
+			for (size_t i = 0; i < 3; i++)
+				data[i] = (data[i] * static_cast<double>(i) + p.data[i]) / static_cast<double>(i + 1);
+			i++;
+		}
+
+		px out(void) const
+		{
+			uint8_t d[3]{
+				static_cast<uint8_t>(data[0]),
+				static_cast<uint8_t>(data[1]),
+				static_cast<uint8_t>(data[2])
+			};
+			return px(d);
+		}
+	};
+
 	void sample(Img &dst)
 	{
 		static auto nr = [](size_t i, size_t s) {
@@ -168,11 +216,100 @@ public:
 		static auto cv = [](size_t i, size_t ss, size_t ds) {
 			return dnr(nr(i, ss), ds);
 		};
-		class px { uint8_t data[3]; };
 		for (size_t i = 0; i < dst.m_h; i++)
 			for (size_t j = 0; j < dst.m_w; j++)
 				reinterpret_cast<px*>(dst.m_data)[i * dst.m_w + j] =
 					reinterpret_cast<px*>(m_data)[cv(i, dst.m_h, m_h) * m_w + cv(j, dst.m_w, m_w)];
+	}
+
+	struct Enc {
+		size_t blk_size;
+		size_t blk_stride;
+
+		Enc(size_t blk_size) :
+			blk_size(blk_size),
+			blk_stride(sizeof(px) * 2 + (blk_size * blk_size) / 8)
+		{
+		}
+	};
+
+	size_t cmp_size(const Enc &e)
+	{
+		size_t blks = (m_w / e.blk_size) * (m_h / e.blk_size);
+		return blks * e.blk_stride;
+	}
+
+	uint8_t* alloc_cmp(const Enc &e)
+	{
+		return new uint8_t[cmp_size(e)];
+	}
+
+	void cmp(const Enc &e, uint8_t *dst)
+	{
+		size_t w = m_w / e.blk_size, h = m_h / e.blk_size;
+		size_t blk_stride = e.blk_stride;
+		size_t hs = e.blk_size / 8;
+		for (size_t i = 0; i < h; i++)
+			for (size_t j = 0; j < w; j++) {
+				auto addr_blk = [&](size_t y, size_t x) {
+					return m_data + ((i * e.blk_size + y) * m_w + j * e.blk_size + x) * 3;
+				};
+
+				px cs[2] {
+					addr_blk(e.blk_size / 4, e.blk_size / 4),
+					addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
+				};
+
+				for (size_t i = 0; i < 64; i++) {
+					pxd pd[2];
+					for (size_t i = 0; i < e.blk_size; i++)
+						for (size_t j = 0; j < e.blk_size; j++) {
+							auto c = px(addr_blk(i, j));
+							if (c.dst(cs[0]) < c.dst(cs[1]))
+								pd[0].inc(c);
+							else
+								pd[1].inc(c);
+						}
+					for (size_t i = 0; i < 2; i++)
+						cs[i] = pd[i].out();
+				}
+				size_t coff = (i * w + j) * blk_stride;
+				for (size_t i = 0; i < e.blk_size; i++)
+					for (size_t j = 0; j < hs; j++) {
+						uint8_t v = 0;
+						for (size_t k = 0; k < 8; k++) {
+							auto c = px(addr_blk(i, j * 8 + k));
+							if (c.dst(cs[0]) > c.dst(cs[1]))
+								v |= (1 << k);
+						}
+						dst[coff + sizeof(cs) + i * hs + j] = v;
+					}
+				std::memcpy(dst + coff, cs, sizeof(cs));
+			}
+	}
+
+	void dcmp(const Enc &e, const uint8_t *c)
+	{
+		size_t w = m_w / e.blk_size, h = m_h / e.blk_size;
+		size_t blk_stride = e.blk_stride;
+		size_t hs = e.blk_size / 8;
+		for (size_t i = 0; i < h; i++)
+			for (size_t j = 0; j < w; j++) {
+				auto addr_blk = [&](size_t y, size_t x) {
+					return m_data + ((i * e.blk_size + y) * m_w + j * e.blk_size + x) * 3;
+				};
+				size_t coff = (i * w + j) * blk_stride;
+				for (size_t i = 0; i < e.blk_size; i++)
+					for (size_t j = 0; j < hs; j++) {
+						uint8_t v = c[coff + sizeof(px) * 2 + i * hs + j];
+						for (size_t k = 0; k < 8; k++) {
+							auto *s = c + coff + (v & (1 << k) ? sizeof(px) : 0);
+							auto c = addr_blk(i, j * 8 + k);
+							for (size_t i = 0; i < 3; i++)
+								c[i] = s[i];
+						}
+					}
+			}
 	}
 };
 
@@ -188,7 +325,13 @@ int main(int argc, char **argv)
 	Img src("./sample.bmp");
 	Img dst(400, 240);
 	src.sample(dst);
+	Img::Enc e(16);
+	//std::printf("IMG SIZE: %zu\n", dst.cmp_size(e));
+	auto cmp = dst.alloc_cmp(e);
+	dst.cmp(e, cmp);
+	dst.dcmp(e, cmp);
 	dst.out("./sample_out.bmp");
+	delete[] cmp;
 
 	auto vc = vigem_alloc();
 	vAssert(vigem_connect(vc));
