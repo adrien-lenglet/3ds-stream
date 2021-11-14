@@ -14,7 +14,7 @@ OUT_OBJ = $(OUT_SRC:.cpp=.o)
 all: $(OUT)
 
 $(OUT): $(OUT_OBJ)
-	$(CXX) $(CXXFLAGS) $(OUT_OBJ) -o $(OUT) -lws2_32 -Ldep/lib -lViGEmClient -lSetupapi
+	$(CXX) $(CXXFLAGS) $(OUT_OBJ) -o $(OUT) -lws2_32 -Ldep/lib -lViGEmClient -lSetupapi -lgdi32
 
 clean:
 	rm -f $(OUT_OBJ) $(OUT)

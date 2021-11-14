@@ -18,12 +18,12 @@ class Img
 	size_t m_h;
 	uint8_t *m_data;
 
+public:
 	static size_t computeStride(size_t w)
 	{
 		return align_up(w * 3, 4);
 	}
 
-public:
 	uint8_t* get_data(void)
 	{
 		return m_data;
@@ -60,6 +60,14 @@ public:
 		}
 		fclose(f);
 		//std::printf("%zu, %zu\n", m_w, m_h);
+	}
+
+	void load(const uint8_t *bmpdata)
+	{
+		size_t s = computeStride(m_w);
+		size_t ds = m_w * 3;
+		for (size_t i = 0; i < m_h; i++)
+			std::memcpy(m_data + ds * i, bmpdata + s * i, ds);
 	}
 #endif
 	Img(size_t w, size_t h) :
@@ -231,7 +239,7 @@ public:
 					addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
 				};
 
-				for (size_t i = 0; i < 64; i++) {
+				for (size_t i = 0; i < 4; i++) {
 					pxd pd[2];
 					for (size_t i = 0; i < e.blk_size; i++)
 						for (size_t j = 0; j < e.blk_size; j++) {

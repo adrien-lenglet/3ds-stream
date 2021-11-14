@@ -77,6 +77,15 @@ int main(int argc, char **argv)
 	dst.dcmp(e, cmp);
 	dst.out("./sample_out.bmp");
 
+	HDC hScreenDC = GetDC(nullptr); // CreateDC("DISPLAY",nullptr,nullptr,nullptr);
+	HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
+	int width = GetDeviceCaps(hScreenDC,HORZRES);
+	int height = GetDeviceCaps(hScreenDC,VERTRES);
+	HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC,width,height);
+
+	auto frame_bmp_buf = Img(width + 16, height);
+	auto frame_bmp = Img(width, height);
+
 	auto &frame = dst;
 
 	auto vc = vigem_alloc();
@@ -85,6 +94,8 @@ int main(int argc, char **argv)
 	vAssert(vigem_target_add(vc, pad));
 
 	auto cleanup = [&]() {
+		DeleteDC(hMemoryDC);
+		DeleteDC(hScreenDC);
 		delete[] cmp;
 		vigem_target_remove(vc, pad);
 		vigem_target_free(pad);
@@ -160,6 +171,30 @@ int main(int argc, char **argv)
 				if (ts > 0)
 					std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<size_t>(ts) * 1000000000));
 			}
+			HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hBitmap));
+			BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,0,SRCCOPY);
+			hBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hOldBitmap));
+			BITMAPINFO bi{
+				{
+					sizeof(BITMAPINFOHEADER),
+					width,
+					height,
+					1,	// biPlanes
+					24,	// biBitCount
+					BI_RGB,	// biCompression
+					static_cast<uint32_t>(Img::computeStride(width) * height),	// biSizeImage
+					1,	// biXPelsPerMeter
+					1,	// biYPelsPerMeter
+					0,	// biClrUsed
+					0	// biClrImportant
+				},
+				{}
+			};
+			assert(GetDIBits(hMemoryDC, hBitmap, 0, height, frame_bmp_buf.get_data(), &bi, DIB_RGB_COLORS));
+			frame_bmp.load(frame_bmp_buf.get_data());
+			frame_bmp.sample(dst);
+			dst.cmp(e, cmp);
+
 		}
 	} catch (boost::system::system_error &e) {
 		std::printf("ERR: %s\n", e.what());
