@@ -204,7 +204,7 @@ public:
 
 		static Enc create(void)
 		{
-			return Enc(16);
+			return Enc(8);
 		}
 	};
 

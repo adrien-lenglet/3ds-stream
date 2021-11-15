@@ -8,6 +8,8 @@
 #include <wingdi.h>
 #include <cstdio>
 #include <chrono>
+#include <thread>
+#include <mutex>
 
 #define BIT(n) (1U<<(n))
 
@@ -72,10 +74,9 @@ int main(int argc, char **argv)
 	src.sample(dst);
 	auto e = Img::Enc::create();
 	std::printf("IMG SIZE: %zu\n", dst.cmp_size(e));
-	auto cmp = dst.alloc_cmp(e);
-	dst.cmp(e, cmp);
+	/*dst.cmp(e, cmp);
 	dst.dcmp(e, cmp);
-	dst.out("./sample_out.bmp");
+	dst.out("./sample_out.bmp");*/
 
 	HDC hScreenDC = GetDC(nullptr); // CreateDC("DISPLAY",nullptr,nullptr,nullptr);
 	HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
@@ -93,114 +94,144 @@ int main(int argc, char **argv)
 	const auto pad = vigem_target_x360_alloc();
 	vAssert(vigem_target_add(vc, pad));
 
-	auto cleanup = [&]() {
-		DeleteDC(hMemoryDC);
-		DeleteDC(hScreenDC);
-		delete[] cmp;
-		vigem_target_remove(vc, pad);
-		vigem_target_free(pad);
-		vigem_disconnect(vc);
-		vigem_free(vc);
-	};
-
 	auto addr = argv[0];
 	char lastbuf[12];
 	//uint32_t last_in = 0;
 
 	size_t frame_ndx = 0;
-	auto bef = std::chrono::high_resolution_clock::now();
+	//auto bef = std::chrono::high_resolution_clock::now();
 
-	try {
-		boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(addr), 69);
-		boost::asio::io_service ios;
-		boost::asio::ip::tcp::socket sock(ios, ep.protocol());
-		sock.connect(ep);
-		std::printf("Connected to 3DS %s!\n", addr);
-		while (true) {
-			char buf[12];
-			if (boost::asio::read(sock, boost::asio::buffer(buf)) != sizeof(buf)) {
-				std::printf("Disconnected.\n");
-				break;
-			}
-			auto in = reinterpret_cast<uint32_t&>(buf[0]);
-			auto x = reinterpret_cast<int16_t&>(buf[4]);
-			auto y = reinterpret_cast<int16_t&>(buf[6]);
-			size_t cframe_ndx = reinterpret_cast<uint32_t&>(buf[8]);
+	std::mutex conn_mtx;
+	std::mutex cap_mtx;
+	std::mutex enc_mtx;
+	std::vector<std::jthread> threads;
+	bool stop = false;
+	std::mutex stop_mtx;
+	static constexpr size_t pp_depth = 3;
+	uint8_t *cmps[pp_depth];
 
-			XINPUT_STATE state{};
-			int32_t scale = 192;
-			state.Gamepad.sThumbLX = x * scale;
-			state.Gamepad.sThumbLY = y * scale;
-			state.Gamepad.wButtons =
-				(in & m3ds::KEY_A ? XINPUT_GAMEPAD_B : 0) |
-				(in & m3ds::KEY_B ? XINPUT_GAMEPAD_A : 0) |
-				(in & m3ds::KEY_X ? XINPUT_GAMEPAD_Y : 0) |
-				(in & m3ds::KEY_Y ? XINPUT_GAMEPAD_X : 0) |
+	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(addr), 69);
+	boost::asio::io_service ios;
+	boost::asio::ip::tcp::socket sock(ios, ep.protocol());
+	sock.connect(ep);
+	std::printf("Connected to 3DS %s!\n", addr);
+	for (size_t i = 0; i < pp_depth; i++) {
+		auto cmp = dst.alloc_cmp(e);
+		cmps[i] = cmp;
+		threads.emplace_back([&, i, cmp]() {
+			try {
+				while (true) {
+					{
+						std::lock_guard l(conn_mtx);
+						char buf[12];
+						if (boost::asio::read(sock, boost::asio::buffer(buf)) != sizeof(buf)) {
+							std::printf("Disconnected.\n");
+							break;
+						}
+						auto in = reinterpret_cast<uint32_t&>(buf[0]);
+						auto x = reinterpret_cast<int16_t&>(buf[4]);
+						auto y = reinterpret_cast<int16_t&>(buf[6]);
+						size_t cframe_ndx = reinterpret_cast<uint32_t&>(buf[8]);
 
-				(in & m3ds::KEY_L ? XINPUT_GAMEPAD_LEFT_SHOULDER : 0) |
-				(in & m3ds::KEY_R ? XINPUT_GAMEPAD_RIGHT_SHOULDER : 0) |
+						XINPUT_STATE state{};
+						int32_t scale = 192;
+						state.Gamepad.sThumbLX = x * scale;
+						state.Gamepad.sThumbLY = y * scale;
+						state.Gamepad.wButtons =
+							(in & m3ds::KEY_A ? XINPUT_GAMEPAD_B : 0) |
+							(in & m3ds::KEY_B ? XINPUT_GAMEPAD_A : 0) |
+							(in & m3ds::KEY_X ? XINPUT_GAMEPAD_Y : 0) |
+							(in & m3ds::KEY_Y ? XINPUT_GAMEPAD_X : 0) |
 
-				(in & m3ds::KEY_START ? XINPUT_GAMEPAD_START : 0) |
-				(in & m3ds::KEY_SELECT ? XINPUT_GAMEPAD_LEFT_THUMB : 0) |
+							(in & m3ds::KEY_L ? XINPUT_GAMEPAD_LEFT_SHOULDER : 0) |
+							(in & m3ds::KEY_R ? XINPUT_GAMEPAD_RIGHT_SHOULDER : 0) |
 
-				(in & m3ds::KEY_DLEFT ? XINPUT_GAMEPAD_DPAD_LEFT : 0) |
-				(in & m3ds::KEY_DRIGHT ? XINPUT_GAMEPAD_DPAD_RIGHT : 0) |
-				(in & m3ds::KEY_DUP ? XINPUT_GAMEPAD_DPAD_UP : 0) |
-				(in & m3ds::KEY_DDOWN ? XINPUT_GAMEPAD_DPAD_DOWN : 0)
-				;
+							(in & m3ds::KEY_START ? XINPUT_GAMEPAD_START : 0) |
+							(in & m3ds::KEY_SELECT ? XINPUT_GAMEPAD_LEFT_THUMB : 0) |
 
-			if (std::memcmp(buf, lastbuf, sizeof(buf))) {
-				vigem_target_x360_update(vc, pad, *reinterpret_cast<XUSB_REPORT*>(&state.Gamepad));
-				/*for (size_t i = 0; i < 8; i++)
-					std::printf("%d ", buf[i]);
-				std::printf("\n");*/
-			}
-			std::memcpy(lastbuf, buf, sizeof(buf));
-			//last_in = in;
+							(in & m3ds::KEY_DLEFT ? XINPUT_GAMEPAD_DPAD_LEFT : 0) |
+							(in & m3ds::KEY_DRIGHT ? XINPUT_GAMEPAD_DPAD_RIGHT : 0) |
+							(in & m3ds::KEY_DUP ? XINPUT_GAMEPAD_DPAD_UP : 0) |
+							(in & m3ds::KEY_DDOWN ? XINPUT_GAMEPAD_DPAD_DOWN : 0)
+							;
 
-			if (cframe_ndx + 1 >= frame_ndx) {
-				boost::asio::write(sock, boost::asio::buffer(cmp, frame.cmp_size(e)));
-				frame_ndx++;
-				if (frame_ndx % 15 == 0)
-					std::printf("frame: %zu\n", frame_ndx);
+						if (std::memcmp(buf, lastbuf, sizeof(buf))) {
+							vigem_target_x360_update(vc, pad, *reinterpret_cast<XUSB_REPORT*>(&state.Gamepad));
+							/*for (size_t i = 0; i < 8; i++)
+								std::printf("%d ", buf[i]);
+							std::printf("\n");*/
+						}
+						std::memcpy(lastbuf, buf, sizeof(buf));
+						//last_in = in;
+						if (cframe_ndx + 1 >= frame_ndx) {
+							boost::asio::write(sock, boost::asio::buffer(cmp, frame.cmp_size(e)));
+							frame_ndx++;
+							if (frame_ndx % 15 == 0)
+								std::printf("frame: %zu\n", frame_ndx);
 
-				auto now = std::chrono::high_resolution_clock::now();
-				auto delta = static_cast<std::chrono::duration<double>>(now - bef).count();
-				bef = now;
-				double ts = 1.0 / 50.0 - delta;
-				if (ts > 0)
-					std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<size_t>(ts) * 1000000000));
-			}
-			HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hBitmap));
-			BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,0,SRCCOPY);
-			hBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hOldBitmap));
-			BITMAPINFO bi{
+							/*auto now = std::chrono::high_resolution_clock::now();
+							auto delta = static_cast<std::chrono::duration<double>>(now - bef).count();
+							bef = now;
+							double ts = 1.0 / 50.0 - delta;
+							if (ts > 0)
+								std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<size_t>(ts) * 1000000000));*/
+						}
+					}
+					{
+						std::lock_guard l(cap_mtx);
+						HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hBitmap));
+						BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,0,SRCCOPY);
+						hBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hOldBitmap));
+						BITMAPINFO bi{
+							{
+								sizeof(BITMAPINFOHEADER),
+								width,
+								height,
+								1,	// biPlanes
+								24,	// biBitCount
+								BI_RGB,	// biCompression
+								static_cast<uint32_t>(Img::computeStride(width) * height),	// biSizeImage
+								1,	// biXPelsPerMeter
+								1,	// biYPelsPerMeter
+								0,	// biClrUsed
+								0	// biClrImportant
+							},
+							{}
+						};
+						assert(GetDIBits(hMemoryDC, hBitmap, 0, height, frame_bmp_buf.get_data(), &bi, DIB_RGB_COLORS));
+					}
+					{
+						std::lock_guard l(enc_mtx);
+						frame_bmp.load(frame_bmp_buf.get_data());
+						frame_bmp.sample(dst);
+						dst.cmp(e, cmp);
+					}
+				}
+			} catch (boost::system::system_error &e) {
+				std::printf("ERR: %s\n", e.what());
 				{
-					sizeof(BITMAPINFOHEADER),
-					width,
-					height,
-					1,	// biPlanes
-					24,	// biBitCount
-					BI_RGB,	// biCompression
-					static_cast<uint32_t>(Img::computeStride(width) * height),	// biSizeImage
-					1,	// biXPelsPerMeter
-					1,	// biYPelsPerMeter
-					0,	// biClrUsed
-					0	// biClrImportant
-				},
-				{}
-			};
-			assert(GetDIBits(hMemoryDC, hBitmap, 0, height, frame_bmp_buf.get_data(), &bi, DIB_RGB_COLORS));
-			frame_bmp.load(frame_bmp_buf.get_data());
-			frame_bmp.sample(dst);
-			dst.cmp(e, cmp);
-
-		}
-	} catch (boost::system::system_error &e) {
-		std::printf("ERR: %s\n", e.what());
-		cleanup();
-		return 1;
+					std::lock_guard l(stop_mtx);
+					stop = true;
+				}
+			}
+		});
 	}
-	cleanup();
+	//cleanup();
+	while (true) {
+		{
+			std::lock_guard l(stop_mtx);
+			if (stop)
+				break;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+	DeleteDC(hMemoryDC);
+	DeleteDC(hScreenDC);
+	for (size_t i = 0; i < pp_depth; i++)
+		delete[] cmps[i];
+	vigem_target_remove(vc, pad);
+	vigem_target_free(pad);
+	vigem_disconnect(vc);
+	vigem_free(vc);
 	return 0;
 }
