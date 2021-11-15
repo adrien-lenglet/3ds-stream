@@ -31,6 +31,9 @@
 #include <arpa/inet.h>
 
 #include <chrono>
+#include <mutex>
+#include <thread>
+#include <vector>
 #include "../../win-driver/src/Img.hpp"
 
 #define SOC_ALIGN       0x1000
@@ -72,7 +75,64 @@ void socShutdown() {
 
 }
 
+static void svcAssert(Result r, const char *code)
+{
+	if (r != 0) {
+		printf("Func '%s' failed: %li\n", code, r);
+		while (true) {
+			hidScanInput();
+			auto kDown = hidKeysHeld();
+			if (kDown & KEY_START)
+				break;
+			gfxFlushBuffers();
+			gfxSwapBuffers();
+			gspWaitForVBlank();
+		}
+		exit(1);
+	}
+}
+
+#define sAssert(v) svcAssert(v, #v)
+
+template <typename Fn>
+Handle launchThread(void *stack_top, s32 thread_priority, s32 processor_id, Fn &&fn)
+{
+	Handle res;
+	svcAssert(svcCreateThread(&res, [](void *ptr) {
+		(*reinterpret_cast<std::remove_reference_t<Fn>*>(ptr))();
+	}, reinterpret_cast<u32>(static_cast<void*>(&fn)), reinterpret_cast<u32*>(stack_top), thread_priority, processor_id), "create thread");
+	return res;
+}
+
 //static char rbuf[4000000];
+
+static constexpr size_t pp_depth = 2;
+static constexpr size_t stack_size = 1024 * 1024;
+
+class mutex
+{
+	Handle m_handle;
+
+public:
+	mutex(void)
+	{
+		sAssert(svcCreateMutex(&m_handle, false));
+	}
+	~mutex(void)
+	{
+		sAssert(svcCloseHandle(m_handle));
+	}
+
+	void lock(void)
+	{
+		sAssert(svcWaitSynchronization(m_handle, U64_MAX));
+	}
+
+	void unlock(void)
+	{
+		sAssert(svcReleaseMutex(m_handle));
+	}
+};
 
 int main(int argc, char **argv)
 {
@@ -97,7 +157,7 @@ int main(int argc, char **argv)
 	struct sockaddr_in client, server;
 	u32 clientlen = sizeof(client);
 
-	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	if (sock < 0)
 		failExit("socket: %d %s\n", errno, strerror(errno));
@@ -122,6 +182,8 @@ int main(int argc, char **argv)
 		failExit("listen: %d %s\n", errno, strerror(errno));
 	}
 
+	bool isdisc = false;
+	bool done = false;
 	auto frame = Img::create();
 	auto e = Img::Enc::create();
 	size_t cmp_size = frame.cmp_size(e);
@@ -129,94 +191,162 @@ int main(int argc, char **argv)
 	//size_t bcount = frame.blk_count(e);
 	//size_t bpx_count = e.blk_px_count;
 
-	while (true) {
-		printf("Waiting for client.. You won't be able to exit the app until someone connects (blocking socket).\n");
-		while (true) {
-			hidScanInput();
-			if (hidKeysDown() & KEY_START)
-				goto done;
+	auto base = svcGetSystemTick();
 
+	std::vector<Handle> threads;
+	uint32_t frame_ndx = 0;
+
+	mutex input_mtx;
+	mutex dec_mtx;
+	mutex printf_mtx;
+	mutex finish_mtx;
+	size_t finish_count = 0;
+
+	input_mtx.lock();
+	float fps = 0.0;
+
+	uint8_t *stacks = reinterpret_cast<uint8_t*>(memalign(8, (pp_depth + 1) * stack_size + 16));
+
+	//svcWaitSynchronization
+
+	for (size_t i = 0; i < pp_depth; i++) {
+		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x18, -2, [&]() {
+			while (true) {
+				{
+					input_mtx.lock();
+					if (done) {
+						input_mtx.unlock();
+						break;
+					}
+					hidScanInput();
+
+					auto kDown = hidKeysHeld();
+					if ((kDown & KEY_START) && (kDown & KEY_SELECT)) {
+						done = true;
+						input_mtx.unlock();
+						break;
+					}
+					circlePosition pos;
+					hidCircleRead(&pos);
+					char buf[8 + sizeof(frame_ndx)];
+					reinterpret_cast<decltype(kDown)&>(buf[0]) = kDown;
+					reinterpret_cast<decltype(pos.dx)&>(buf[4]) = pos.dx;
+					reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
+					reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
+					if (isdisc)
+						goto input_end;
+					if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
+						//printf("Client disconnected.\n");
+						isdisc = true;
+						goto input_end;
+					}
+
+					{
+						size_t sf = 0;
+						while (true) {
+							auto g = read(csock, cmp + sf, cmp_size - sf);
+							if (g < 0) {
+								//printf("Client disconnected (%d).\n", g);
+								isdisc = true;
+								goto input_end;
+							}
+							sf += static_cast<size_t>(g);
+							if (sf >= cmp_size)
+								break;
+						}
+						frame_ndx++;
+						static constexpr size_t max_frames = 15;
+						if (frame_ndx % max_frames == 0) {
+							auto now = svcGetSystemTick();
+							auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
+							base = now;
+							fps = static_cast<float>(max_frames) / delta;
+						}
+					}
+
+				input_end:
+					input_mtx.unlock();
+				}
+				{
+					dec_mtx.lock();
+
+					frame.dcmp(e, cmp);
+					frame.flip(fb);
+					//std::memcpy(fb, frame.get_data(), 400 * 240 * 3);
+
+					gfxFlushBuffers();
+					gfxSwapBuffers();
+					//svcSleepThread(1000000);
+
+					dec_mtx.unlock();
+				}
+			}
+			finish_mtx.lock();
+			finish_count++;
+			finish_mtx.unlock();
+			svcExitThread();
+		}));
+	}
+
+	while (true) {
+		printf_mtx.lock();
+		printf("Waiting for client.. You won't be able to exit the app until someone connects (blocking socket).\n");
+		printf_mtx.unlock();
+		while (true) {
 			csock = accept(sock, (struct sockaddr *) &client, &clientlen);
 			if (csock >= 0) {
 				printf("Client connected!\n");
 				break;
 			}
-			/*gfxFlushBuffers();
-			gfxSwapBuffers();
-			gspWaitForVBlank();*/
 		}
 
 		consoleClear();
 
-		/*auto bef = svcGetSystemTick();
-		size_t rec = 0;
-		size_t it = 0;
-		float clock = 0.0;*/
+		frame_ndx = 0;
+		isdisc = false;
+		done = false;
 
-		auto base = svcGetSystemTick();
+		base = svcGetSystemTick();
+		input_mtx.unlock();
 
-		uint32_t frame_ndx = 0;
-		while (aptMainLoop()) {
-			hidScanInput();
-
-			auto kDown = hidKeysHeld();
-			if ((kDown & KEY_START) && (kDown & KEY_SELECT))
+		size_t print_lim = 0;
+		while (true) {
+			input_mtx.lock();
+			if (done) {
+				input_mtx.unlock();
 				goto done;
-			circlePosition pos;
-			hidCircleRead(&pos);
-			char buf[8 + sizeof(frame_ndx)];
-			reinterpret_cast<decltype(kDown)&>(buf[0]) = kDown;
-			reinterpret_cast<decltype(pos.dx)&>(buf[4]) = pos.dx;
-			reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
-			reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
-			if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
-				printf("Client disconnected.\n");
-				break;
 			}
-
-			size_t sf = 0;
-			while (true) {
-				auto g = read(csock, cmp + sf, cmp_size - sf);
-				if (g < 0) {
-					printf("Client disconnected (%d).\n", g);
-					goto cdisc;
-				}
-				sf += static_cast<size_t>(g);
-				if (sf >= cmp_size)
-					break;
+			if (isdisc)
+				goto cdisc;
+			if (!aptMainLoop()) {
+				done = true;
+				input_mtx.unlock();
+				goto done;
 			}
-			frame_ndx++;
-			if (frame_ndx % 15 == 0) {
-				auto now = svcGetSystemTick();
-				auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
-				printf("frame: %lu, %g FPS\n", frame_ndx, static_cast<double>(frame_ndx + 1) / delta);
+			input_mtx.unlock();
+			if (print_lim++ >= 60) {
+				printf("%g FPS\n", fps);
+				print_lim = 0;
 			}
-			frame.dcmp(e, cmp);
-			frame.flip(fb);
-			//std::memcpy(fb, frame.get_data(), 400 * 240 * 3);
-
-			/*rec += read(csock, rbuf, sizeof(rbuf));
-			if (it++ == 256) {
-
-				auto now = svcGetSystemTick();
-				auto delta = static_cast<float>(now - bef) / (CPU_TICKS_PER_MSEC * 1000.0);
-				bef = now;
-				clock += delta;
-				//printf("rate: %g (%u), time: %g\n", static_cast<float>(rec) / delta, rec, clock);
-				it = 0;
-				rec = 0;
-			}*/
-
-			gfxFlushBuffers();
-			gfxSwapBuffers();
-			/*gspWaitForVBlank();*/
-			//svcSleepThread(1000000);
+			svcSleepThread(50000000);
 		}
+
 		cdisc:
+		printf("Client disconnected.\n");
 		close(csock);
 		csock = -1;
 	}
 done:
+	while (true) {
+		finish_mtx.lock();
+		if (finish_count >= pp_depth) {
+			finish_mtx.unlock();
+			break;
+		}
+		finish_mtx.unlock();
+		svcSleepThread(50000000);
+	}
+	close(csock);
 	gfxExit();
 	return 0;
 }
