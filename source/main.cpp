@@ -106,7 +106,7 @@ Handle launchThread(void *stack_top, s32 thread_priority, s32 processor_id, Fn &
 
 //static char rbuf[4000000];
 
-static constexpr size_t pp_depth = 2;
+static constexpr size_t pp_depth = 1;
 static constexpr size_t stack_size = 1024 * 1024;
 
 class mutex
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
 	//svcWaitSynchronization
 
-	for (size_t i = 0; i < pp_depth; i++) {
+	/*for (size_t i = 0; i < pp_depth; i++) {
 		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x18, -2, [&]() {
 			while (true) {
 				{
@@ -218,53 +218,6 @@ int main(int argc, char **argv)
 						input_mtx.unlock();
 						break;
 					}
-					hidScanInput();
-
-					auto kDown = hidKeysHeld();
-					if ((kDown & KEY_START) && (kDown & KEY_SELECT)) {
-						done = true;
-						input_mtx.unlock();
-						break;
-					}
-					circlePosition pos;
-					hidCircleRead(&pos);
-					char buf[8 + sizeof(frame_ndx)];
-					reinterpret_cast<decltype(kDown)&>(buf[0]) = kDown;
-					reinterpret_cast<decltype(pos.dx)&>(buf[4]) = pos.dx;
-					reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
-					reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
-					if (isdisc)
-						goto input_end;
-					if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
-						//printf("Client disconnected.\n");
-						isdisc = true;
-						goto input_end;
-					}
-
-					{
-						size_t sf = 0;
-						while (true) {
-							auto g = read(csock, cmp + sf, cmp_size - sf);
-							if (g < 0) {
-								//printf("Client disconnected (%d).\n", g);
-								isdisc = true;
-								goto input_end;
-							}
-							sf += static_cast<size_t>(g);
-							if (sf >= cmp_size)
-								break;
-						}
-						frame_ndx++;
-						static constexpr size_t max_frames = 15;
-						if (frame_ndx % max_frames == 0) {
-							auto now = svcGetSystemTick();
-							auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
-							base = now;
-							fps = static_cast<float>(max_frames) / delta;
-						}
-					}
-
-				input_end:
 					input_mtx.unlock();
 				}
 				{
@@ -286,7 +239,7 @@ int main(int argc, char **argv)
 			finish_mtx.unlock();
 			svcExitThread();
 		}));
-	}
+	}*/
 
 	while (true) {
 		printf_mtx.lock();
@@ -311,24 +264,78 @@ int main(int argc, char **argv)
 
 		size_t print_lim = 0;
 		while (true) {
-			input_mtx.lock();
-			if (done) {
+			{
+				input_mtx.lock();
+				if (done) {
+					input_mtx.unlock();
+					goto done;
+				}
+				if (isdisc)
+					goto cdisc;
+				if (!aptMainLoop()) {
+					done = true;
+					input_mtx.unlock();
+					goto done;
+				}
+				hidScanInput();
+
+				auto kDown = hidKeysHeld();
+				if ((kDown & KEY_START) && (kDown & KEY_SELECT)) {
+					done = true;
+					input_mtx.unlock();
+					goto done;
+				}
+				circlePosition pos;
+				hidCircleRead(&pos);
+				char buf[8 + sizeof(frame_ndx)];
+				reinterpret_cast<decltype(kDown)&>(buf[0]) = kDown;
+				reinterpret_cast<decltype(pos.dx)&>(buf[4]) = pos.dx;
+				reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
+				reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
+				if (isdisc)
+					goto input_end;
+				if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
+					//printf("Client disconnected.\n");
+					isdisc = true;
+					break;
+				}
+
+				{
+					size_t sf = 0;
+					while (true) {
+						auto g = read(csock, cmp + sf, cmp_size - sf);
+						if (g < 0) {
+							//printf("Client disconnected (%d).\n", g);
+							isdisc = true;
+							goto cdisc;
+						}
+						sf += static_cast<size_t>(g);
+						if (sf >= cmp_size)
+							break;
+					}
+					frame_ndx++;
+					static constexpr size_t max_frames = 15;
+					if (frame_ndx % max_frames == 0) {
+						auto now = svcGetSystemTick();
+						auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
+						base = now;
+						fps = static_cast<float>(max_frames) / delta;
+						if (print_lim++ >= 60) {
+							printf("%g FPS\n", fps);
+							print_lim = 0;
+						}
+					}
+				}
+
+			input_end:
 				input_mtx.unlock();
-				goto done;
 			}
-			if (isdisc)
-				goto cdisc;
-			if (!aptMainLoop()) {
-				done = true;
-				input_mtx.unlock();
-				goto done;
+			{
+				/*dec_mtx.lock();
+
+				dec_mtx.unlock();*/
 			}
-			input_mtx.unlock();
-			if (print_lim++ >= 60) {
-				printf("%g FPS\n", fps);
-				print_lim = 0;
-			}
-			svcSleepThread(50000000);
+			//svcSleepThread(50000000);
 		}
 
 		cdisc:
@@ -337,7 +344,7 @@ int main(int argc, char **argv)
 		csock = -1;
 	}
 done:
-	while (true) {
+	/*while (true) {
 		finish_mtx.lock();
 		if (finish_count >= pp_depth) {
 			finish_mtx.unlock();
@@ -345,7 +352,7 @@ done:
 		}
 		finish_mtx.unlock();
 		svcSleepThread(50000000);
-	}
+	}*/
 	close(csock);
 	gfxExit();
 	return 0;
