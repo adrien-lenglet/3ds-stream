@@ -40,7 +40,7 @@
 #define SOC_BUFFERSIZE  0x100000
 
 static u32 *SOC_buffer = nullptr;
-s32 sock = -1, csock = -1;
+static s32 sock = -1, csock = -1;
 
 //---------------------------------------------------------------------------------
 void failExit(const char *fmt, ...) {
@@ -140,7 +140,7 @@ int main(int argc, char **argv)
 	consoleInit(GFX_BOTTOM, NULL);
 	gfxSetDoubleBuffering(GFX_TOP, false);
 	u16 fbw, fbh;
-	u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &fbw, &fbh);
+	static u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &fbw, &fbh);
 	printf("FB: %u, %u\n", fbw, fbh);
 
 	SOC_buffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
@@ -182,25 +182,26 @@ int main(int argc, char **argv)
 		failExit("listen: %d %s\n", errno, strerror(errno));
 	}
 
-	bool isdisc = false;
-	bool done = false;
-	auto frame = Img::create();
-	auto e = Img::Enc::create();
+	static bool isdisc = false;
+	static bool done = false;
+	static auto frame = Img::create();
+	static auto e = Img::Enc::create();
 	size_t cmp_size = frame.cmp_size(e);
-	auto cmp = frame.alloc_cmp(e);
+	static auto cmp = frame.alloc_cmp(e);
 	//size_t bcount = frame.blk_count(e);
 	//size_t bpx_count = e.blk_px_count;
 
 	auto base = svcGetSystemTick();
 
 	std::vector<Handle> threads;
-	uint32_t frame_ndx = 0;
+	static uint32_t frame_ndx = 0;
 
-	mutex input_mtx;
-	mutex dec_mtx;
-	mutex printf_mtx;
-	mutex finish_mtx;
-	size_t finish_count = 0;
+	static mutex input_mtx;
+	static mutex dec_mtx;
+	static mutex printf_mtx;
+	static mutex finish_mtx;
+	static size_t finish_count = 0;
+	static mutex disp_mtx[2];
 
 	input_mtx.lock();
 	float fps = 0.0;
@@ -209,8 +210,9 @@ int main(int argc, char **argv)
 
 	//svcWaitSynchronization
 
-	/*for (size_t i = 0; i < pp_depth; i++) {
-		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x18, -2, [&]() {
+	for (size_t i = 0; i < pp_depth; i++) {
+		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x18, -1, [&]() {
+			size_t cd = 0;
 			while (true) {
 				{
 					input_mtx.lock();
@@ -221,6 +223,7 @@ int main(int argc, char **argv)
 					input_mtx.unlock();
 				}
 				{
+					disp_mtx[cd].lock();
 					dec_mtx.lock();
 
 					frame.dcmp(e, cmp);
@@ -229,9 +232,12 @@ int main(int argc, char **argv)
 
 					gfxFlushBuffers();
 					gfxSwapBuffers();
+					//gspWaitForVBlank();
 					//svcSleepThread(1000000);
 
 					dec_mtx.unlock();
+					disp_mtx[cd].unlock();
+					cd = (cd + 1) % 2;
 				}
 			}
 			finish_mtx.lock();
@@ -239,7 +245,7 @@ int main(int argc, char **argv)
 			finish_mtx.unlock();
 			svcExitThread();
 		}));
-	}*/
+	}
 
 	while (true) {
 		printf_mtx.lock();
@@ -263,16 +269,12 @@ int main(int argc, char **argv)
 		input_mtx.unlock();
 
 		size_t print_lim = 0;
+		size_t cd = 0;
 		while (true) {
 			{
-				input_mtx.lock();
-				if (done) {
-					input_mtx.unlock();
-					goto done;
-				}
-				if (isdisc)
-					goto cdisc;
+				disp_mtx[cd].lock();
 				if (!aptMainLoop()) {
+					input_mtx.lock();
 					done = true;
 					input_mtx.unlock();
 					goto done;
@@ -281,6 +283,7 @@ int main(int argc, char **argv)
 
 				auto kDown = hidKeysHeld();
 				if ((kDown & KEY_START) && (kDown & KEY_SELECT)) {
+					input_mtx.lock();
 					done = true;
 					input_mtx.unlock();
 					goto done;
@@ -327,8 +330,9 @@ int main(int argc, char **argv)
 					}
 				}
 
-			input_end:
-				input_mtx.unlock();
+			input_end:;
+				disp_mtx[cd].unlock();
+				cd = (cd + 1) % 2;
 			}
 			{
 				/*dec_mtx.lock();
@@ -339,12 +343,13 @@ int main(int argc, char **argv)
 		}
 
 		cdisc:
+		input_mtx.lock();
 		printf("Client disconnected.\n");
 		close(csock);
 		csock = -1;
 	}
 done:
-	/*while (true) {
+	while (true) {
 		finish_mtx.lock();
 		if (finish_count >= pp_depth) {
 			finish_mtx.unlock();
@@ -352,8 +357,8 @@ done:
 		}
 		finish_mtx.unlock();
 		svcSleepThread(50000000);
-	}*/
-	close(csock);
+	}
+	//close(csock);
 	gfxExit();
 	return 0;
 }
