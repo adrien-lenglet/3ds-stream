@@ -80,8 +80,8 @@ int main(int argc, char **argv)
 
 	HDC hScreenDC = GetDC(nullptr); // CreateDC("DISPLAY",nullptr,nullptr,nullptr);
 	HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
-	int width = GetDeviceCaps(hScreenDC,HORZRES);
-	int height = GetDeviceCaps(hScreenDC,VERTRES);
+	int width = 640;//GetDeviceCaps(hScreenDC,HORZRES);
+	int height = 480;//;GetDeviceCaps(hScreenDC,VERTRES);
 	HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC,width,height);
 
 	auto frame_bmp_buf = Img(width + 16, height);
@@ -166,7 +166,7 @@ int main(int argc, char **argv)
 						if (cframe_ndx + 1 >= frame_ndx) {
 							boost::asio::write(sock, boost::asio::buffer(cmp, frame.cmp_size(e)));
 							frame_ndx++;
-							if (frame_ndx % 15 == 0)
+							if (frame_ndx % 60 == 0)
 								std::printf("frame: %zu\n", frame_ndx);
 
 							/*auto now = std::chrono::high_resolution_clock::now();
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
 					{
 						std::lock_guard l(cap_mtx);
 						HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hBitmap));
-						BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,0,SRCCOPY);
+						BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,32,SRCCOPY);
 						hBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hOldBitmap));
 						BITMAPINFO bi{
 							{
