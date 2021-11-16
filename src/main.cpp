@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 	Img src("./sample.bmp");
 	auto dst = Img::create();
 	src.sample(dst);
-	auto e = Img::Enc::create();
+	static constexpr auto e = Img::de;
 	std::printf("IMG SIZE: %zu\n", dst.cmp_size(e));
 	/*dst.cmp(e, cmp);
 	dst.dcmp(e, cmp);
@@ -204,7 +204,7 @@ int main(int argc, char **argv)
 						std::lock_guard l(enc_mtx);
 						frame_bmp.load(frame_bmp_buf.get_data());
 						frame_bmp.sample(dst);
-						dst.cmp(e, cmp);
+						dst.cmp<e>(cmp);
 					}
 				}
 			} catch (boost::system::system_error &e) {

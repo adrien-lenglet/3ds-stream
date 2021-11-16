@@ -29,9 +29,12 @@ public:
 		return m_data;
 	}
 
+	static constexpr size_t dw = 400;
+	static constexpr size_t dh = 240;
+
 	static Img create(void)
 	{
-		return Img(400, 240);
+		return Img(dw, dh);
 	}
 
 #ifdef _WINGDI_
@@ -195,7 +198,7 @@ public:
 		size_t blk_stride;
 		size_t blk_px_count;
 
-		Enc(size_t blk_size) :
+		/*Enc(size_t blk_size) :
 			blk_size(blk_size),
 			blk_stride(sizeof(px) * 2 + (blk_size * blk_size) / 8),
 			blk_px_count(blk_size * blk_size)
@@ -204,8 +207,15 @@ public:
 
 		static Enc create(void)
 		{
-			return Enc(16);
-		}
+			return Enc(8);
+		}*/
+	};
+
+	static constexpr size_t dblk_size = 16;
+	static constexpr auto de = Enc {
+		dblk_size,
+		sizeof(px) * 2 + (dblk_size * dblk_size) / 8,
+		dblk_size * dblk_size
 	};
 
 	size_t blk_count(const Enc &e)
@@ -223,15 +233,17 @@ public:
 		return new uint8_t[cmp_size(e)];
 	}
 
-	void cmp(const Enc &e, uint8_t *dst)
+	template <Enc e>
+	void cmp(uint8_t *dst)
 	{
-		size_t w = m_w / e.blk_size, h = m_h / e.blk_size;
-		size_t blk_stride = e.blk_stride;
-		size_t hs = e.blk_size / 8;
+		static constexpr size_t w = dw / e.blk_size, h = dh / e.blk_size;
+		static constexpr size_t blk_stride = e.blk_stride;
+		static constexpr size_t hs = e.blk_size / 8;
+		auto data = m_data;
 		for (size_t i = 0; i < h; i++)
 			for (size_t j = 0; j < w; j++) {
-				auto addr_blk = [&](size_t y, size_t x) {
-					return m_data + ((i * e.blk_size + y) * m_w + j * e.blk_size + x) * 3;
+				auto addr_blk = [data, i, j](size_t y, size_t x) {
+					return data + ((i * e.blk_size + y) * dw + j * e.blk_size + x) * 3;
 				};
 
 				px cs[2] {
@@ -275,15 +287,16 @@ public:
 					dst[(j * m_h + i) * 3 + k] = m_data[(i * m_w + j) * 3 + k];
 	}
 
-	void dcmp(const Enc &e, const uint8_t *c, uint8_t *dst)
+	template <Enc e>
+	static void dcmp(const uint8_t *c, uint8_t *dst)
 	{
-		size_t w = m_w / e.blk_size, h = m_h / e.blk_size;
-		size_t blk_stride = e.blk_stride;
-		size_t hs = e.blk_size / 8;
+		static constexpr size_t w = dw / e.blk_size, h = dh / e.blk_size;
+		static constexpr size_t blk_stride = e.blk_stride;
+		static constexpr size_t hs = e.blk_size / 8;
 		for (size_t i = 0; i < h; i++)
 			for (size_t j = 0; j < w; j++) {
-				auto addr_blk = [&](size_t y, size_t x) {
-					return dst + ((j * e.blk_size + x) * m_h + i * e.blk_size + y) * 3;
+				auto addr_blk = [dst, i, j](size_t y, size_t x) {
+					return dst + ((j * e.blk_size + x) * dh + i * e.blk_size + y) * 3;
 				};
 				size_t coff = (i * w + j) * blk_stride;
 				for (size_t i = 0; i < e.blk_size; i++)
