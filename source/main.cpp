@@ -185,11 +185,9 @@ int main(int argc, char **argv)
 	static bool isdisc = true;
 	static bool done = false;
 	static auto frame = Img::create();
-	static auto e = Img::Enc::create();
+	static constexpr auto e = Img::de;
 	size_t cmp_size = frame.cmp_size(e);
 	static auto cmp = frame.alloc_cmp(e);
-	//size_t bcount = frame.blk_count(e);
-	//size_t bpx_count = e.blk_px_count;
 
 	static auto base = svcGetSystemTick();
 
@@ -202,15 +200,12 @@ int main(int argc, char **argv)
 	static size_t finish_count = 0;
 	static mutex disp_mtx[2];
 
-	//input_mtx.lock();
 	static float fps = 0.0;
 
 	uint8_t *stacks = reinterpret_cast<uint8_t*>(memalign(8, pp_depth * stack_size + 16));
 
-	//svcWaitSynchronization
-
 	for (size_t i = 0; i < pp_depth; i++) {
-		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x3F, -2, [&]() {
+		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 60, -2, [&]() {
 			size_t cd = 0;
 			size_t ckcd = 0;
 			bool disc = true;
@@ -228,13 +223,10 @@ int main(int argc, char **argv)
 				if (!disc) {
 					disp_mtx[cd].lock();
 
-					frame.dcmp(e, cmp, fb);
-					//frame.flip(fb);
-					//std::memcpy(fb, frame.get_data(), 400 * 240 * 3);
+					Img::dcmp<e>(cmp, fb);
 
 					gfxFlushBuffers();
 					gfxSwapBuffers();
-					//svcSleepThread(1000000);
 
 					disp_mtx[cd].unlock();
 					cd = (cd + 1) % 2;
@@ -270,7 +262,6 @@ int main(int argc, char **argv)
 
 		base = svcGetSystemTick();
 
-		//size_t print_lim = 0;
 		size_t cd = 0;
 		while (true) {
 			{
@@ -300,7 +291,6 @@ int main(int argc, char **argv)
 				reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
 				reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
 				if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
-					//printf("Client disconnected.\n");
 					input_mtx.lock();
 					isdisc = true;
 					input_mtx.unlock();
@@ -313,7 +303,6 @@ int main(int argc, char **argv)
 					while (true) {
 						auto g = read(csock, cmp + sf, cmp_size - sf);
 						if (g < 0) {
-							//printf("Client disconnected (%d).\n", g);
 							input_mtx.lock();
 							isdisc = true;
 							input_mtx.unlock();
@@ -325,24 +314,19 @@ int main(int argc, char **argv)
 							break;
 					}
 					frame_ndx++;
-					static constexpr size_t max_frames = 15;
+					static constexpr size_t max_frames = 60;
 					if (frame_ndx % max_frames == 0) {
 						auto now = svcGetSystemTick();
 						auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
 						base = now;
 						fps = static_cast<float>(max_frames) / delta;
-						//if (print_lim++ >= 60) {
-							printf("%g FPS\n", fps);
-						//	print_lim = 0;
-						//}
+						printf("%g FPS\n", fps);
 					}
 				}
 
-			//input_end:;
 				disp_mtx[cd].unlock();
 				cd = (cd + 1) % 2;
 			}
-			//svcSleepThread(50000000);
 		}
 
 		cdisc:
@@ -361,7 +345,6 @@ done:
 		finish_mtx.unlock();
 		svcSleepThread(50000000);
 	}
-	//close(csock);
 	gfxExit();
 	return 0;
 }
