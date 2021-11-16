@@ -204,7 +204,7 @@ public:
 
 		static Enc create(void)
 		{
-			return Enc(8);
+			return Enc(16);
 		}
 	};
 
@@ -275,7 +275,7 @@ public:
 					dst[(j * m_h + i) * 3 + k] = m_data[(i * m_w + j) * 3 + k];
 	}
 
-	void dcmp(const Enc &e, const uint8_t *c)
+	void dcmp(const Enc &e, const uint8_t *c, uint8_t *dst)
 	{
 		size_t w = m_w / e.blk_size, h = m_h / e.blk_size;
 		size_t blk_stride = e.blk_stride;
@@ -283,7 +283,7 @@ public:
 		for (size_t i = 0; i < h; i++)
 			for (size_t j = 0; j < w; j++) {
 				auto addr_blk = [&](size_t y, size_t x) {
-					return m_data + ((i * e.blk_size + y) * m_w + j * e.blk_size + x) * 3;
+					return dst + ((j * e.blk_size + x) * m_h + i * e.blk_size + y) * 3;
 				};
 				size_t coff = (i * w + j) * blk_stride;
 				for (size_t i = 0; i < e.blk_size; i++)
