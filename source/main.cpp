@@ -228,7 +228,7 @@ int main(int argc, char **argv)
 				if (!disc) {
 					disp_mtx[cd].lock();
 
-					frame.dcmp(e, cmp);
+					frame.dcmp(e, cmp, fb);
 					//frame.flip(fb);
 					//std::memcpy(fb, frame.get_data(), 400 * 240 * 3);
 
