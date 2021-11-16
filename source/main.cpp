@@ -182,7 +182,7 @@ int main(int argc, char **argv)
 		failExit("listen: %d %s\n", errno, strerror(errno));
 	}
 
-	static bool isdisc = false;
+	static bool isdisc = true;
 	static bool done = false;
 	static auto frame = Img::create();
 	static auto e = Img::Enc::create();
@@ -191,54 +191,55 @@ int main(int argc, char **argv)
 	//size_t bcount = frame.blk_count(e);
 	//size_t bpx_count = e.blk_px_count;
 
-	auto base = svcGetSystemTick();
+	static auto base = svcGetSystemTick();
 
 	std::vector<Handle> threads;
 	static uint32_t frame_ndx = 0;
 
 	static mutex input_mtx;
-	static mutex dec_mtx;
 	static mutex printf_mtx;
 	static mutex finish_mtx;
 	static size_t finish_count = 0;
 	static mutex disp_mtx[2];
 
-	input_mtx.lock();
-	float fps = 0.0;
+	//input_mtx.lock();
+	static float fps = 0.0;
 
-	uint8_t *stacks = reinterpret_cast<uint8_t*>(memalign(8, (pp_depth + 1) * stack_size + 16));
+	uint8_t *stacks = reinterpret_cast<uint8_t*>(memalign(8, pp_depth * stack_size + 16));
 
 	//svcWaitSynchronization
 
 	for (size_t i = 0; i < pp_depth; i++) {
-		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x18, -1, [&]() {
+		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 0x3F, -2, [&]() {
 			size_t cd = 0;
+			size_t ckcd = 0;
+			bool disc = true;
 			while (true) {
-				{
+				if (ckcd++ >= 60) {
 					input_mtx.lock();
 					if (done) {
 						input_mtx.unlock();
 						break;
 					}
+					disc = isdisc;
 					input_mtx.unlock();
+					ckcd = 0;
 				}
-				{
+				if (!disc) {
 					disp_mtx[cd].lock();
-					dec_mtx.lock();
 
 					frame.dcmp(e, cmp);
-					frame.flip(fb);
+					//frame.flip(fb);
 					//std::memcpy(fb, frame.get_data(), 400 * 240 * 3);
 
 					gfxFlushBuffers();
 					gfxSwapBuffers();
-					//gspWaitForVBlank();
 					//svcSleepThread(1000000);
 
-					dec_mtx.unlock();
 					disp_mtx[cd].unlock();
 					cd = (cd + 1) % 2;
-				}
+				} else
+					svcSleepThread(50000000);
 			}
 			finish_mtx.lock();
 			finish_count++;
@@ -262,13 +263,14 @@ int main(int argc, char **argv)
 		consoleClear();
 
 		frame_ndx = 0;
+		input_mtx.lock();
 		isdisc = false;
 		done = false;
-
-		base = svcGetSystemTick();
 		input_mtx.unlock();
 
-		size_t print_lim = 0;
+		base = svcGetSystemTick();
+
+		//size_t print_lim = 0;
 		size_t cd = 0;
 		while (true) {
 			{
@@ -277,6 +279,7 @@ int main(int argc, char **argv)
 					input_mtx.lock();
 					done = true;
 					input_mtx.unlock();
+					disp_mtx[cd].unlock();
 					goto done;
 				}
 				hidScanInput();
@@ -286,6 +289,7 @@ int main(int argc, char **argv)
 					input_mtx.lock();
 					done = true;
 					input_mtx.unlock();
+					disp_mtx[cd].unlock();
 					goto done;
 				}
 				circlePosition pos;
@@ -295,12 +299,13 @@ int main(int argc, char **argv)
 				reinterpret_cast<decltype(pos.dx)&>(buf[4]) = pos.dx;
 				reinterpret_cast<decltype(pos.dy)&>(buf[6]) = pos.dy;
 				reinterpret_cast<decltype(frame_ndx)&>(buf[8]) = frame_ndx;
-				if (isdisc)
-					goto input_end;
 				if (write(csock, buf, sizeof(buf)) != sizeof(buf)) {
 					//printf("Client disconnected.\n");
+					input_mtx.lock();
 					isdisc = true;
-					break;
+					input_mtx.unlock();
+					disp_mtx[cd].unlock();
+					goto cdisc;
 				}
 
 				{
@@ -309,7 +314,10 @@ int main(int argc, char **argv)
 						auto g = read(csock, cmp + sf, cmp_size - sf);
 						if (g < 0) {
 							//printf("Client disconnected (%d).\n", g);
+							input_mtx.lock();
 							isdisc = true;
+							input_mtx.unlock();
+							disp_mtx[cd].unlock();
 							goto cdisc;
 						}
 						sf += static_cast<size_t>(g);
@@ -323,27 +331,21 @@ int main(int argc, char **argv)
 						auto delta = static_cast<float>(now - base) / (CPU_TICKS_PER_MSEC * 1000.0);
 						base = now;
 						fps = static_cast<float>(max_frames) / delta;
-						if (print_lim++ >= 60) {
+						//if (print_lim++ >= 60) {
 							printf("%g FPS\n", fps);
-							print_lim = 0;
-						}
+						//	print_lim = 0;
+						//}
 					}
 				}
 
-			input_end:;
+			//input_end:;
 				disp_mtx[cd].unlock();
 				cd = (cd + 1) % 2;
-			}
-			{
-				/*dec_mtx.lock();
-
-				dec_mtx.unlock();*/
 			}
 			//svcSleepThread(50000000);
 		}
 
 		cdisc:
-		input_mtx.lock();
 		printf("Client disconnected.\n");
 		close(csock);
 		csock = -1;
@@ -351,6 +353,7 @@ int main(int argc, char **argv)
 done:
 	while (true) {
 		finish_mtx.lock();
+		printf("Cleaning up (done: %d).. %zu threads have joined.\n", done, finish_count);
 		if (finish_count >= pp_depth) {
 			finish_mtx.unlock();
 			break;
