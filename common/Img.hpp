@@ -60,7 +60,7 @@ struct Enc {
 
 	static constexpr size_t dw = 400;
 	static constexpr size_t dh = 240;
-	static constexpr size_t dblk_size = 8;
+	static constexpr size_t dblk_size = 4;
 	static constexpr size_t bfstride = sizeof(px) * 2;
 
 	static consteval Enc def(void)
@@ -263,7 +263,9 @@ public:
 	uint8_t *alloc_blk(const Enc &e)
 	{
 		size_t size = e.blk_count * Enc::bfstride;
-		return new uint8_t[size];
+		auto res = new uint8_t[size];
+		std::memset(res, 0, size);
+		return res;
 	}
 
 	template <Enc e>
@@ -352,16 +354,33 @@ public:
 					}
 				}
 
-				for (size_t i = 0; i < e.blk_size; i++)
-					for (size_t j = 0; j < vs; j++) {
+				if constexpr (e.blk_size == 4) {
+					for (size_t i = 0; i < e.blk_size / 2; i++) {
 						uint8_t v = 0;
-						for (size_t k = 0; k < 8; k++) {
-							auto c = px(addr_blk(i, j * 8 + k));
+						for (size_t k = 0; k < 4; k++) {
+							auto c = px(addr_blk(i * 2, k));
+							if (c.dst(cs[0]) > c.dst(cs[1]))
+								v |= (1 << k);
+						}
+						for (size_t k = 4; k < 8; k++) {
+							auto c = px(addr_blk(i * 2 + 1, k - 4));
 							if (c.dst(cs[0]) > c.dst(cs[1]))
 								v |= (1 << k);
 						}
 						*dbpp++ = v;
 					}
+				} else {
+					for (size_t i = 0; i < e.blk_size; i++)
+						for (size_t j = 0; j < vs; j++) {
+							uint8_t v = 0;
+							for (size_t k = 0; k < 8; k++) {
+								auto c = px(addr_blk(i, j * 8 + k));
+								if (c.dst(cs[0]) > c.dst(cs[1]))
+									v |= (1 << k);
+							}
+							*dbpp++ = v;
+						}
+				}
 				std::memcpy(cur, cs, sizeof(cs));
 				if (is_ref)
 					w_nib(ref);
@@ -448,18 +467,36 @@ public:
 			for (size_t i = 0; i < e.w; i++, fb += fbbstride_i)
 				for (size_t j = 0; j < e.h; j++, b += Enc::bfstride, fb += fbbstride_j) {
 					auto f = fb;
-					for (size_t i = 0; i < e.blk_size; i++, f += Enc::dh * sizeof(px)) {
-						auto fc = f;
-						for (size_t j = 0; j < vs; j++) {
+					if constexpr (e.blk_size == 4)
+						for (size_t i = 0; i < e.blk_size / 2; i++, f += Enc::dh * sizeof(px)) {
+							auto fc = f;
 							auto v = *c++;
-							static constexpr size_t mx = 1 << 8;
-							for (size_t k = 1; k < mx; k <<= 1) {
+							for (size_t k = 1; k < (1 << 4); k <<= 1) {
+								auto p = b + (v & k ? sizeof(px) : 0);
+								for (size_t i = 0; i < 3; i++)
+									*fc++ = *p++;
+							}
+							f += Enc::dh * sizeof(px);
+							fc = f;
+							for (size_t k = 1 << 4; k < (1 << 8); k <<= 1) {
 								auto p = b + (v & k ? sizeof(px) : 0);
 								for (size_t i = 0; i < 3; i++)
 									*fc++ = *p++;
 							}
 						}
-					}
+					else
+						for (size_t i = 0; i < e.blk_size; i++, f += Enc::dh * sizeof(px)) {
+							auto fc = f;
+							for (size_t j = 0; j < vs; j++) {
+								auto v = *c++;
+								static constexpr size_t mx = 1 << 8;
+								for (size_t k = 1; k < mx; k <<= 1) {
+									auto p = b + (v & k ? sizeof(px) : 0);
+									for (size_t i = 0; i < 3; i++)
+										*fc++ = *p++;
+								}
+							}
+						}
 				}
 		}
 	}
