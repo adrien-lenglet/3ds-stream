@@ -353,7 +353,6 @@ public:
 			static constexpr size_t fbbstride_i = e.h * ((e.blk_size - 1) * e.blk_size) * sizeof(px);
 			static constexpr size_t fbbstride_j = e.blk_size * sizeof(px);
 			static constexpr size_t vs = e.blk_size / 8;
-			uint8_t *mx = cur + e.blk_count * Enc::bfstride;
 			// iterate through blocks, block palette and framebuffer wise
 			auto b = cur, fb = dst;
 			for (size_t i = 0; i < e.w; i++, fb += fbbstride_i)
@@ -363,8 +362,9 @@ public:
 						auto fc = f;
 						for (size_t j = 0; j < vs; j++) {
 							auto v = *c++;
-							for (size_t k = 0; k < 8; k++) {
-								auto p = b + (v & (1 << k) ? sizeof(px) : 0);
+							static constexpr size_t mx = 1 << 8;
+							for (size_t k = 1; k < mx; k <<= 1) {
+								auto p = b + (v & k ? sizeof(px) : 0);
 								for (size_t i = 0; i < 3; i++)
 									*fc++ = *p++;
 							}
