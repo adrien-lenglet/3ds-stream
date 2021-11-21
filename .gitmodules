@@ -1,3 +1,4 @@
 [submodule "dep/ViGEmClient"]
 	path = dep/ViGEmClient
 	url = https://github.com/ViGEm/ViGEmClient
+	ignore = untracked
