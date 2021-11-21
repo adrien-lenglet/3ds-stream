@@ -80,16 +80,10 @@ int main(int argc, char **argv)
 	dst.out("./sample_out.bmp");*/
 
 	HDC hScreenDC = GetDC(nullptr); // CreateDC("DISPLAY",nullptr,nullptr,nullptr);
-	HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
-	int width = 640;//GetDeviceCaps(hScreenDC,HORZRES);
-	int height = 480;//;GetDeviceCaps(hScreenDC,VERTRES);
-	HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC,width,height);
-
-	auto frame_bmp_buf = Img(width + 16, height);
-	auto frame_bmp = Img(width, height);
+	constexpr int width = 640;//GetDeviceCaps(hScreenDC,HORZRES);
+	constexpr int height = 480;//;GetDeviceCaps(hScreenDC,VERTRES);
 
 	static constexpr auto e = Img::de;
-	auto frame = Img::create();
 
 	auto vc = vigem_alloc();
 	vAssert(vigem_connect(vc));
@@ -110,21 +104,60 @@ int main(int argc, char **argv)
 	bool stop = false;
 	std::mutex stop_mtx;
 	static constexpr size_t pp_depth = 3;
-	uint8_t *cmps[pp_depth];
-
-	auto blk_0 = frame.alloc_blk(e);
-	auto blk_1 = frame.alloc_blk(e);
-	size_t cmp_size;
 
 	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(addr), 69);
 	boost::asio::io_service ios;
 	boost::asio::ip::tcp::socket sock(ios, ep.protocol());
 	sock.connect(ep);
 	std::printf("Connected to 3DS %s!\n", addr);
+
+	struct Frame {
+		HBITMAP hBitmap;
+		HDC hMemoryDC;
+		Img frame_bmp_buf;
+		Img frame_bmp;
+		Img frame;
+		uint8_t *cmp;
+		uint8_t *blk_0;
+		uint8_t *blk_1;
+		size_t cmp_size;
+
+		Frame(HDC hScreenDC) :
+			hBitmap(CreateCompatibleBitmap(hScreenDC, width, height)),
+			hMemoryDC(CreateCompatibleDC(hScreenDC)),
+			frame_bmp_buf(width + 16, height),
+			frame_bmp(width, height),
+			frame(Img::create()),
+			cmp(frame.alloc_cmp(e)),
+			blk_0(frame.alloc_blk(e)),
+			blk_1(frame.alloc_blk(e))
+		{
+		}
+		~Frame(void)
+		{
+			DeleteDC(hMemoryDC);
+			delete[] cmp;
+			delete[] blk_0;
+			delete[] blk_1;
+		}
+	};
+
+	Frame frames[3] {hScreenDC, hScreenDC, hScreenDC};
+
 	for (size_t i = 0; i < pp_depth; i++) {
-		auto cmp = frame.alloc_cmp(e);
-		cmps[i] = cmp;
-		threads.emplace_back([&, i, cmp]() {
+		auto &f = frames[i];
+		auto &hBitmap = f.hBitmap;
+		auto &hMemoryDC = f.hMemoryDC;
+
+		auto &frame_bmp_buf = f.frame_bmp_buf;
+		auto &frame_bmp = f.frame_bmp;
+		auto &frame = f.frame;
+
+		auto &cmp = f.cmp;
+		auto &blk_0 = f.blk_0;
+		auto &blk_1 = f.blk_1;
+		auto &cmp_size = f.cmp_size;
+		threads.emplace_back([&]() {
 			try {
 				while (true) {
 					{
@@ -158,6 +191,7 @@ int main(int argc, char **argv)
 						auto t = blk_0;
 						blk_0 = blk_1;
 						blk_1 = t;
+						std::printf("FRAME SIZE: %zu\n", cmp_size);
 					}
 					{
 						std::lock_guard l(conn_mtx);
@@ -234,10 +268,7 @@ int main(int argc, char **argv)
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
-	DeleteDC(hMemoryDC);
 	DeleteDC(hScreenDC);
-	for (size_t i = 0; i < pp_depth; i++)
-		delete[] cmps[i];
 	vAssert(vigem_target_remove(vc, pad));
 	vigem_target_free(pad);
 	vigem_disconnect(vc);
