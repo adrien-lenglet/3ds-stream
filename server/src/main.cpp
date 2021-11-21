@@ -191,7 +191,7 @@ int main(int argc, char **argv)
 						auto t = blk_0;
 						blk_0 = blk_1;
 						blk_1 = t;
-						std::printf("FRAME SIZE: %zu\n", cmp_size);
+						//std::printf("FRAME SIZE: %zu\n", cmp_size);
 					}
 					{
 						std::lock_guard l(conn_mtx);

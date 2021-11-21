@@ -12,6 +12,15 @@ static size_t align_up(size_t v, size_t al)
 		return v - mod + al;
 }
 
+template <typename T>
+static T min(T a, T b)
+{
+	if (a < b)
+		return a;
+	else
+		return b;
+}
+
 struct px {
 	uint8_t data[3];
 
@@ -51,7 +60,7 @@ struct Enc {
 
 	static constexpr size_t dw = 400;
 	static constexpr size_t dh = 240;
-	static constexpr size_t dblk_size = 16;
+	static constexpr size_t dblk_size = 8;
 	static constexpr size_t bfstride = sizeof(px) * 2;
 
 	static consteval Enc def(void)
@@ -277,9 +286,10 @@ public:
 				ch = true;
 			}
 		};
-		size_t bndx = 0;
+		auto last_base = last;
+		auto last_end = last + e.blk_count * Enc::bfstride;
 		for (size_t i = 0; i < e.w; i++)
-			for (size_t j = 0; j < e.h; j++, bndx++) {
+			for (size_t j = 0; j < e.h; j++, last += Enc::bfstride, cur += Enc::bfstride) {
 				auto addr_blk = [data, i, j](size_t x, size_t y) {
 					return data + ((j * e.blk_size + y) * Enc::dw + i * e.blk_size + x) * 3;
 				};
@@ -303,6 +313,44 @@ public:
 					for (size_t i = 0; i < 2; i++)
 						cs[i] = pd[i].out();
 				}
+				bool is_ref = false;
+				uint8_t ref;
+
+				{
+					px pp_best[2] {
+						addr_blk(e.blk_size / 4, e.blk_size / 4),
+						addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
+					};
+					size_t pp_best_ndx;
+					size_t pp_best_score = static_cast<size_t>(-1);
+					for (size_t i = 0; i < 16; i += 2) {
+						auto p = last + e.blk_off[i];
+						if (!(p >= last_base && p < last_end))
+							continue;
+						px pp[2] {
+							addr_blk(e.blk_size / 4, e.blk_size / 4),
+							addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
+						};
+						std::memcpy(pp, p, sizeof(pp));
+						size_t s = 0;
+						for (size_t i = 0; i < e.blk_size; i++)
+							for (size_t j = 0; j < e.blk_size; j++) {
+								auto c = px(addr_blk(i, j));
+								s += min(c.dst(pp[0]), c.dst(pp[1]));
+							}
+						if (s < pp_best_score) {
+							pp_best_ndx = i;
+							pp_best_score = s;
+							std::memcpy(pp_best, pp, sizeof(pp_best));
+						}
+					}
+					pp_best_score /= e.blk_px_count;
+					if (pp_best_score < 16) {
+						is_ref = true;
+						ref = 1 + pp_best_ndx;
+						std::memcpy(cs, pp_best, sizeof(cs));
+					}
+				}
 
 				for (size_t i = 0; i < e.blk_size; i++)
 					for (size_t j = 0; j < vs; j++) {
@@ -314,14 +362,17 @@ public:
 						}
 						*dbpp++ = v;
 					}
-				std::memcpy(cur + bndx * Enc::bfstride, cs, sizeof(cs));
-				for (size_t i = 0; i < 2; i++) {
-					auto c = cs[i].cf1r5g5b5(0);
-					for (size_t i = 0; i < 4; i++) {
-						size_t o = i * 4;
-						w_nib((c & (0x0F << o)) >> o);
+				std::memcpy(cur, cs, sizeof(cs));
+				if (is_ref)
+					w_nib(ref);
+				else
+					for (size_t i = 0; i < 2; i++) {
+						auto c = cs[i].cf1r5g5b5(0);
+						for (size_t i = 0; i < 4; i++) {
+							size_t o = i * 4;
+							w_nib((c & (0x0F << o)) >> o);
+						}
 					}
-				}
 			}
 		if (ch)
 			dst++;
@@ -356,7 +407,7 @@ public:
 			bool bh = false;
 			const uint8_t *mx = last + e.blk_count * Enc::bfstride;
 			for (; last < mx; last += Enc::bfstride) {
-				if (false) {	// blk in last frame
+				if (b & 1) {	// blk in last frame
 					auto l = last + e.blk_off[b & 0x0F];
 					for (size_t i = 0; i < Enc::bfstride; i++)
 						*cr++ = *l++;
