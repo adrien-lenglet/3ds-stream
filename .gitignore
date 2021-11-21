@@ -1,4 +1,7 @@
-open-controls.3dsx
-open-controls.elf
-open-controls.smdh
-build
+open-controls/open-controls.3dsx
+open-controls/open-controls.elf
+open-controls/open-controls.smdh
+open-controls/build
+
+*.exe
+*.o
