@@ -12,6 +12,68 @@ static size_t align_up(size_t v, size_t al)
 		return v - mod + al;
 }
 
+struct px {
+	uint8_t data[3];
+
+	px(const uint8_t *data)
+	{
+		for (size_t i = 0; i < 3; i++)
+			this->data[i] = data[i];
+	}
+
+	size_t dst(const px &other) const
+	{
+		size_t res = 0;
+		for (size_t i = 0; i < 3; i++) {
+			size_t d = data[i] - other.data[i];
+			res += d * d;
+		}
+		return res;
+	}
+};
+
+struct Enc {
+	size_t blk_size;
+	size_t blk_stride;
+	size_t blk_px_count;
+	size_t w;
+	size_t h;
+	size_t blk_count;
+	size_t blk_off[16];
+
+	static constexpr size_t dw = 400;
+	static constexpr size_t dh = 240;
+	static constexpr size_t dblk_size = 16;
+	static constexpr size_t pstride = 6;
+
+	static consteval Enc def(void)
+	{
+		Enc res;
+		res.blk_size = dblk_size;
+		res.blk_px_count = res.blk_size * res.blk_size;
+		res.blk_stride = sizeof(px) * 2 + res.blk_px_count / 8;
+		res.w = dw / res.blk_size;
+		res.h = dh / res.blk_size;
+		res.blk_count = res.w * res.h;
+		size_t base[8] {
+			-res.h - 1,
+			-res.h,
+			-res.h + 1,
+			static_cast<size_t>(-1),
+			0,
+			1,
+			res.h + 1,
+			res.h
+		};
+		for (size_t i = 0; i < 8; i++) {
+			size_t v = base[i] * pstride;	// apply pixel stride
+			for (size_t j = 0; j < 2; j++)
+				res.blk_off[i * 2 + j] = v;
+		}
+		return res;
+	}
+};
+
 class Img
 {
 	size_t m_w;
@@ -29,12 +91,9 @@ public:
 		return m_data;
 	}
 
-	static constexpr size_t dw = 400;
-	static constexpr size_t dh = 240;
-
 	static Img create(void)
 	{
-		return Img(dw, dh);
+		return Img(Enc::dw, Enc::dh);
 	}
 
 #ifdef _WINGDI_
@@ -128,26 +187,6 @@ public:
 	}
 #endif
 
-	struct px {
-		uint8_t data[3];
-
-		px(const uint8_t *data)
-		{
-			for (size_t i = 0; i < 3; i++)
-				this->data[i] = data[i];
-		}
-
-		size_t dst(const px &other) const
-		{
-			size_t res = 0;
-			for (size_t i = 0; i < 3; i++) {
-				size_t d = data[i] - other.data[i];
-				res += d * d;
-			}
-			return res;
-		}
-	};
-
 	struct pxd {
 		double data[3];
 		size_t i = 0;
@@ -193,57 +232,32 @@ public:
 					reinterpret_cast<px*>(m_data)[cv(i, dst.m_h, m_h) * m_w + cv(j, dst.m_w, m_w)];
 	}
 
-	struct Enc {
-		size_t blk_size;
-		size_t blk_stride;
-		size_t blk_px_count;
-
-		/*Enc(size_t blk_size) :
-			blk_size(blk_size),
-			blk_stride(sizeof(px) * 2 + (blk_size * blk_size) / 8),
-			blk_px_count(blk_size * blk_size)
-		{
-		}
-
-		static Enc create(void)
-		{
-			return Enc(8);
-		}*/
-	};
-
-	static constexpr size_t dblk_size = 16;
-	static constexpr auto de = Enc {
-		dblk_size,
-		sizeof(px) * 2 + (dblk_size * dblk_size) / 8,
-		dblk_size * dblk_size
-	};
-
-	size_t blk_count(const Enc &e)
-	{
-		return (m_w / e.blk_size) * (m_h / e.blk_size);
-	}
-
-	size_t cmp_size(const Enc &e)
-	{
-		return blk_count(e) * e.blk_stride;
-	}
+	static constexpr auto de = Enc::def();
+	//static_assert(de.blk_count % 8 == 0, "Must have blk_count multiple of 8");
 
 	uint8_t* alloc_cmp(const Enc &e)
 	{
-		return new uint8_t[cmp_size(e)];
+		size_t size = e.blk_count + e.blk_count * sizeof(px) * 2 + m_w * m_h / 8;
+		return new uint8_t[size];
+	}
+
+	uint8_t *alloc_blk(const Enc &e)
+	{
+		size_t size = e.blk_count * 4;
+		return new uint8_t[size];
 	}
 
 	template <Enc e>
-	void cmp(uint8_t *dst)
+	void cmp(const uint8_t *last, uint8_t *cur, uint8_t *dst)
 	{
-		static constexpr size_t w = dw / e.blk_size, h = dh / e.blk_size;
+		static constexpr size_t w = e.w, h = e.h;
 		static constexpr size_t blk_stride = e.blk_stride;
 		static constexpr size_t hs = e.blk_size / 8;
 		auto data = m_data;
 		for (size_t i = 0; i < h; i++)
 			for (size_t j = 0; j < w; j++) {
 				auto addr_blk = [data, i, j](size_t y, size_t x) {
-					return data + ((i * e.blk_size + y) * dw + j * e.blk_size + x) * 3;
+					return data + ((i * e.blk_size + y) * Enc::dw + j * e.blk_size + x) * 3;
 				};
 
 				px cs[2] {
@@ -288,15 +302,15 @@ public:
 	}
 
 	template <Enc e>
-	static void dcmp(const uint8_t *c, uint8_t *dst)
+	static void dcmp(const uint8_t *c, const uint8_t *last, uint8_t *cur, uint8_t *dst)
 	{
-		static constexpr size_t w = dw / e.blk_size, h = dh / e.blk_size;
+		static constexpr size_t w = e.w, h = e.h;
 		static constexpr size_t blk_stride = e.blk_stride;
 		static constexpr size_t hs = e.blk_size / 8;
 		for (size_t i = 0; i < h; i++)
 			for (size_t j = 0; j < w; j++) {
 				auto addr_blk = [dst, i, j](size_t y, size_t x) {
-					return dst + ((j * e.blk_size + x) * dh + i * e.blk_size + y) * 3;
+					return dst + ((j * e.blk_size + x) * Enc::dh + i * e.blk_size + y) * 3;
 				};
 				size_t coff = (i * w + j) * blk_stride;
 				for (size_t i = 0; i < e.blk_size; i++)
@@ -310,5 +324,49 @@ public:
 						}
 					}
 			}
+
+		/*{
+			static constexpr auto upck_rbg = [](uint16_t src, uint8_t *&dst)
+			{
+				*dst++ = (src & 0x003E) << 2;
+				*dst++ = (src & 0x07C0) >> 3;
+				*dst++ = (src & 0xF800) >> 8;
+			};
+
+			auto cr = cur;
+			uint8_t b = *c++;
+			bool bh = false;
+			static constexpr auto mx = e.blk_count * Enc::pstride;
+			for (size_t i = 0; i < mx; i += Enc::pstride) {
+				if (bh & 1) {	// blk in last frame
+					auto l = last + i + e.blk_off[b & 0x0F];
+					for (size_t i = 0; i < 3; i++)
+						*cr++ = *l++;
+					if (bh)
+						b = *c++;
+					else {
+						bh = true;
+						b >>= 4;
+					}
+				} else {	// new blk data
+					if (bh) {
+						uint32_t v = reinterpret_cast<uint32_t*>(c);
+						upck_rbg(b + ((v & 0x00000FFF) << 4), cr);
+						upck_rbg(b + ((v & 0x0FFFF000) >> 12), cr);
+						c += 4;
+						b = v >> 28;
+					} else {
+						upck_rbg(*reinterpret_cast<uint16_t*>(c++ - 1), cr);
+						upck_rbg(*reinterpret_cast<uint16_t*>(c), cr);
+						c += 2;
+						b = *c++;
+					}
+				}
+			}
+			// if b at start of byte, rewind c to match it
+			// otherwise if b is high, skip it
+			if (!bh)
+				c--;
+		}*/
 	}
 };

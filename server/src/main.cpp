@@ -112,6 +112,9 @@ int main(int argc, char **argv)
 	static constexpr size_t pp_depth = 3;
 	uint8_t *cmps[pp_depth];
 
+	auto blk_0 = frame.alloc_blk(e);
+	auto blk_1 = frame.alloc_blk(e);
+
 	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(addr), 69);
 	boost::asio::io_service ios;
 	boost::asio::ip::tcp::socket sock(ios, ep.protocol());
@@ -166,7 +169,8 @@ int main(int argc, char **argv)
 						std::memcpy(lastbuf, buf, sizeof(buf));
 						//last_in = in;
 						if (cframe_ndx + 1 >= frame_ndx) {
-							boost::asio::write(sock, boost::asio::buffer(cmp, frame.cmp_size(e)));
+							uint32_t s = e.blk_count + e.blk_count * sizeof(px) * 2 + Enc::dw * Enc::dh / 8;
+							boost::asio::write(sock, boost::asio::buffer(cmp, s));
 							frame_ndx++;
 							if (frame_ndx % 60 == 0)
 								std::printf("frame: %zu\n", frame_ndx);
@@ -206,7 +210,10 @@ int main(int argc, char **argv)
 						std::lock_guard l(enc_mtx);
 						frame_bmp.load(frame_bmp_buf.get_data());
 						frame_bmp.sample(frame);
-						frame.cmp<e>(cmp);
+						frame.cmp<e>(blk_0, blk_1, cmp);
+						auto t = blk_0;
+						blk_0 = blk_1;
+						blk_1 = t;
 					}
 				}
 			} catch (boost::system::system_error &e) {

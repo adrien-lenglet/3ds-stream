@@ -186,8 +186,10 @@ int main(int argc, char **argv)
 	static bool done = false;
 	static auto frame = Img::create();
 	static constexpr auto e = Img::de;
-	size_t cmp_size = frame.cmp_size(e);
+	//size_t cmp_size = frame.cmp_size(e);
 	static auto cmp = frame.alloc_cmp(e);
+	static auto blk_0 = frame.alloc_blk(e);
+	static auto blk_1 = frame.alloc_blk(e);
 
 	static auto base = svcGetSystemTick();
 
@@ -203,6 +205,15 @@ int main(int argc, char **argv)
 	static float fps = 0.0;
 
 	uint8_t *stacks = reinterpret_cast<uint8_t*>(memalign(8, pp_depth * stack_size + 16));
+
+	/*{	// unaligned read test, should print 255 in both cases
+		uint32_t v[2] {
+			0xFF00,
+			0
+		};
+		printf("v: %lu\n", *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(&v) + 1));
+		printf("v2: %u\n", *reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(&v) + 1));
+	}*/
 
 	for (size_t i = 0; i < pp_depth; i++) {
 		threads.emplace_back(launchThread(stacks + (i + 1) * stack_size, 60, -2, [&]() {
@@ -223,7 +234,10 @@ int main(int argc, char **argv)
 				if (!disc) {
 					disp_mtx[cd].lock();
 
-					Img::dcmp<e>(cmp, fb);
+					Img::dcmp<e>(cmp, blk_0, blk_1, fb);
+					auto t = blk_0;
+					blk_0 = blk_1;
+					blk_1 = t;
 
 					gfxFlushBuffers();
 					gfxSwapBuffers();
@@ -300,8 +314,17 @@ int main(int argc, char **argv)
 
 				{
 					size_t sf = 0;
+					//uint32_t s;
+					uint32_t s = e.blk_count + e.blk_count * sizeof(px) * 2 + Enc::dw * Enc::dh / 8;
+					/*if (read(csock, &s, sizeof(s)) != sizeof(s)) {
+						input_mtx.lock();
+						isdisc = true;
+						input_mtx.unlock();
+						disp_mtx[cd].unlock();
+						goto cdisc;
+					}*/
 					while (true) {
-						auto g = read(csock, cmp + sf, cmp_size - sf);
+						auto g = read(csock, cmp + sf, s - sf);
 						if (g < 0) {
 							input_mtx.lock();
 							isdisc = true;
@@ -310,7 +333,7 @@ int main(int argc, char **argv)
 							goto cdisc;
 						}
 						sf += static_cast<size_t>(g);
-						if (sf >= cmp_size)
+						if (sf >= s)
 							break;
 					}
 					frame_ndx++;
