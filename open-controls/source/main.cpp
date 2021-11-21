@@ -313,28 +313,38 @@ int main(int argc, char **argv)
 				}
 
 				{
-					size_t sf = 0;
-					//uint32_t s;
-					uint32_t s = e.blk_count + e.blk_count * sizeof(px) * 2 + Enc::dw * Enc::dh / 8;
-					/*if (read(csock, &s, sizeof(s)) != sizeof(s)) {
-						input_mtx.lock();
-						isdisc = true;
-						input_mtx.unlock();
-						disp_mtx[cd].unlock();
-						goto cdisc;
-					}*/
-					while (true) {
-						auto g = read(csock, cmp + sf, s - sf);
-						if (g < 0) {
-							input_mtx.lock();
-							isdisc = true;
-							input_mtx.unlock();
-							disp_mtx[cd].unlock();
-							goto cdisc;
+					uint16_t s;
+					{
+						uint16_t sf = 0;
+						while (true) {
+							auto g = read(csock, reinterpret_cast<uint8_t*>(&s) + sf, sizeof(s));
+							if (g < 0) {
+								input_mtx.lock();
+								isdisc = true;
+								input_mtx.unlock();
+								disp_mtx[cd].unlock();
+								goto cdisc;
+							}
+							sf += static_cast<uint16_t>(g);
+							if (sf >= sizeof(s))
+								break;
 						}
-						sf += static_cast<size_t>(g);
-						if (sf >= s)
-							break;
+					}
+					{
+						uint16_t sf = 0;
+						while (true) {
+							auto g = read(csock, cmp + sf, s - sf);
+							if (g < 0) {
+								input_mtx.lock();
+								isdisc = true;
+								input_mtx.unlock();
+								disp_mtx[cd].unlock();
+								goto cdisc;
+							}
+							sf += static_cast<uint16_t>(g);
+							if (sf >= s)
+								break;
+						}
 					}
 					frame_ndx++;
 					static constexpr size_t max_frames = 60;

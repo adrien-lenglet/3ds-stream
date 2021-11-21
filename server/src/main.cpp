@@ -114,6 +114,7 @@ int main(int argc, char **argv)
 
 	auto blk_0 = frame.alloc_blk(e);
 	auto blk_1 = frame.alloc_blk(e);
+	size_t cmp_size;
 
 	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(addr), 69);
 	boost::asio::io_service ios;
@@ -126,6 +127,38 @@ int main(int argc, char **argv)
 		threads.emplace_back([&, i, cmp]() {
 			try {
 				while (true) {
+					{
+						std::lock_guard l(cap_mtx);
+						HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hBitmap));
+						BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,32,SRCCOPY);
+						hBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hOldBitmap));
+						BITMAPINFO bi{
+							{
+								sizeof(BITMAPINFOHEADER),
+								width,
+								height,
+								1,	// biPlanes
+								24,	// biBitCount
+								BI_RGB,	// biCompression
+								static_cast<uint32_t>(Img::computeStride(width) * height),	// biSizeImage
+								1,	// biXPelsPerMeter
+								1,	// biYPelsPerMeter
+								0,	// biClrUsed
+								0	// biClrImportant
+							},
+							{}
+						};
+						assert(GetDIBits(hMemoryDC, hBitmap, 0, height, frame_bmp_buf.get_data(), &bi, DIB_RGB_COLORS));
+					}
+					{
+						std::lock_guard l(enc_mtx);
+						frame_bmp.load(frame_bmp_buf.get_data());
+						frame_bmp.sample(frame);
+						cmp_size = frame.cmp<e>(blk_0, blk_1, cmp);
+						auto t = blk_0;
+						blk_0 = blk_1;
+						blk_1 = t;
+					}
 					{
 						std::lock_guard l(conn_mtx);
 						char buf[12];
@@ -169,8 +202,7 @@ int main(int argc, char **argv)
 						std::memcpy(lastbuf, buf, sizeof(buf));
 						//last_in = in;
 						if (cframe_ndx + 1 >= frame_ndx) {
-							uint32_t s = e.blk_count + e.blk_count * sizeof(px) * 2 + Enc::dw * Enc::dh / 8;
-							boost::asio::write(sock, boost::asio::buffer(cmp, s));
+							boost::asio::write(sock, boost::asio::buffer(cmp, cmp_size));
 							frame_ndx++;
 							if (frame_ndx % 60 == 0)
 								std::printf("frame: %zu\n", frame_ndx);
@@ -182,38 +214,6 @@ int main(int argc, char **argv)
 							if (ts > 0)
 								std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<size_t>(ts) * 1000000000));*/
 						}
-					}
-					{
-						std::lock_guard l(cap_mtx);
-						HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hBitmap));
-						BitBlt(hMemoryDC,0,0,width,height,hScreenDC,0,32,SRCCOPY);
-						hBitmap = static_cast<HBITMAP>(SelectObject(hMemoryDC,hOldBitmap));
-						BITMAPINFO bi{
-							{
-								sizeof(BITMAPINFOHEADER),
-								width,
-								height,
-								1,	// biPlanes
-								24,	// biBitCount
-								BI_RGB,	// biCompression
-								static_cast<uint32_t>(Img::computeStride(width) * height),	// biSizeImage
-								1,	// biXPelsPerMeter
-								1,	// biYPelsPerMeter
-								0,	// biClrUsed
-								0	// biClrImportant
-							},
-							{}
-						};
-						assert(GetDIBits(hMemoryDC, hBitmap, 0, height, frame_bmp_buf.get_data(), &bi, DIB_RGB_COLORS));
-					}
-					{
-						std::lock_guard l(enc_mtx);
-						frame_bmp.load(frame_bmp_buf.get_data());
-						frame_bmp.sample(frame);
-						frame.cmp<e>(blk_0, blk_1, cmp);
-						auto t = blk_0;
-						blk_0 = blk_1;
-						blk_1 = t;
 					}
 				}
 			} catch (boost::system::system_error &e) {

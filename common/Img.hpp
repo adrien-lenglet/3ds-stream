@@ -30,6 +30,14 @@ struct px {
 		}
 		return res;
 	}
+
+	uint16_t cf1r5g5b5(bool flag)
+	{
+		return (flag ? 1 : 0) +
+			(static_cast<uint16_t>(data[0] & 0xF8) >> 2) +
+			(static_cast<uint16_t>(data[1] & 0xF8) << 3) +
+			(static_cast<uint16_t>(data[2] & 0xF8) << 8);
+	}
 };
 
 struct Enc {
@@ -237,7 +245,9 @@ public:
 
 	uint8_t* alloc_cmp(const Enc &e)
 	{
-		size_t size = e.blk_count + e.blk_count * sizeof(px) * 2 + m_w * m_h / 8;
+		size_t size = e.blk_count * 4 +	// up to 32 bits per block
+			m_w * m_h / 8 +	// 1 bpp
+			2;	// 16 bits size included (only for frame size retrieval, not needed for decoding)
 		return new uint8_t[size];
 	}
 
@@ -250,20 +260,35 @@ public:
 	template <Enc e>
 	uint16_t cmp(const uint8_t *last, uint8_t *cur, uint8_t *dst)	// frame cannot exceed 64 KiB
 	{
-		static constexpr size_t w = e.w, h = e.h;
-		static constexpr size_t blk_stride = e.blk_stride;
-		static constexpr size_t hs = e.blk_size / 8;
+		static constexpr size_t dbpp_size = Enc::dw * Enc::dh / 8;
+		auto dst_base = dst;
+		dst += 2;
+		auto dbpp_base = dst + e.blk_count * 4;
+		auto dbpp = dbpp_base;
+		bool ch = false;
+		static constexpr size_t vs = e.blk_size / 8;
 		auto data = m_data;
-		for (size_t i = 0; i < h; i++)
-			for (size_t j = 0; j < w; j++) {
-				auto addr_blk = [data, i, j](size_t y, size_t x) {
-					return data + ((i * e.blk_size + y) * Enc::dw + j * e.blk_size + x) * 3;
+		auto w_nib = [&](uint8_t v) {
+			if (ch) {
+				*dst++ += v << 4;
+				ch = false;
+			} else {
+				*dst = v;
+				ch = true;
+			}
+		};
+		size_t bndx = 0;
+		for (size_t i = 0; i < e.w; i++)
+			for (size_t j = 0; j < e.h; j++, bndx++) {
+				auto addr_blk = [data, i, j](size_t x, size_t y) {
+					return data + ((j * e.blk_size + y) * Enc::dw + i * e.blk_size + x) * 3;
 				};
 
 				px cs[2] {
 					addr_blk(e.blk_size / 4, e.blk_size / 4),
 					addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
 				};
+				static_assert(Enc::bfstride == sizeof(cs), "Palette mismatch");
 
 				for (size_t i = 0; i < 4; i++) {
 					pxd pd[2];
@@ -278,20 +303,33 @@ public:
 					for (size_t i = 0; i < 2; i++)
 						cs[i] = pd[i].out();
 				}
-				size_t coff = (i * w + j) * blk_stride;
+
 				for (size_t i = 0; i < e.blk_size; i++)
-					for (size_t j = 0; j < hs; j++) {
+					for (size_t j = 0; j < vs; j++) {
 						uint8_t v = 0;
 						for (size_t k = 0; k < 8; k++) {
 							auto c = px(addr_blk(i, j * 8 + k));
 							if (c.dst(cs[0]) > c.dst(cs[1]))
 								v |= (1 << k);
 						}
-						dst[coff + sizeof(cs) + i * hs + j] = v;
+						*dbpp++ = v;
 					}
-				std::memcpy(dst + coff, cs, sizeof(cs));
+				std::memcpy(cur + bndx * Enc::bfstride, cs, sizeof(cs));
+				for (size_t i = 0; i < 2; i++) {
+					auto c = cs[i].cf1r5g5b5(0);
+					for (size_t i = 0; i < 4; i++) {
+						size_t o = i * 4;
+						w_nib((c & (0x0F << o)) >> o);
+					}
+				}
 			}
-		return 0;
+		if (ch)
+			dst++;
+		std::memmove(dst, dbpp_base, dbpp_size);
+		dst += dbpp_size;
+		size_t size = dst - dst_base;
+		*reinterpret_cast<uint16_t*>(dst_base) = size - 2;
+		return size;
 	}
 
 	void flip(uint8_t *dst)
@@ -318,13 +356,14 @@ public:
 			bool bh = false;
 			const uint8_t *mx = last + e.blk_count * Enc::bfstride;
 			for (; last < mx; last += Enc::bfstride) {
-				if (bh & 1) {	// blk in last frame
+				if (false) {	// blk in last frame
 					auto l = last + e.blk_off[b & 0x0F];
 					for (size_t i = 0; i < Enc::bfstride; i++)
 						*cr++ = *l++;
-					if (bh)
+					if (bh) {
+						bh = false;
 						b = *c++;
-					else {
+					} else {
 						bh = true;
 						b >>= 4;
 					}
