@@ -187,7 +187,9 @@ int main(int argc, char **argv)
 	static auto frame = Img::create();
 	static constexpr auto e = Img::de;
 	//size_t cmp_size = frame.cmp_size(e);
-	static auto cmp = frame.alloc_cmp(e);
+	static uint8_t *cmp[2];
+	for (size_t i = 0; i < 2; i++)
+		cmp[i] = frame.alloc_cmp(e);
 	static auto blk_0 = frame.alloc_blk(e);
 	static auto blk_1 = frame.alloc_blk(e);
 
@@ -234,7 +236,7 @@ int main(int argc, char **argv)
 				if (!disc) {
 					disp_mtx[cd].lock();
 
-					Img::dcmp<e>(cmp, blk_0, blk_1, fb);
+					Img::dcmp<e>(cmp[cd], blk_0, blk_1, fb);
 					auto t = blk_0;
 					blk_0 = blk_1;
 					blk_1 = t;
@@ -333,7 +335,7 @@ int main(int argc, char **argv)
 					{
 						uint16_t sf = 0;
 						while (true) {
-							auto g = read(csock, cmp + sf, s - sf);
+							auto g = read(csock, cmp[cd] + sf, s - sf);
 							if (g < 0) {
 								input_mtx.lock();
 								isdisc = true;

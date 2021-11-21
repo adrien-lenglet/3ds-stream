@@ -111,6 +111,13 @@ int main(int argc, char **argv)
 	sock.connect(ep);
 	std::printf("Connected to 3DS %s!\n", addr);
 
+	uint8_t *blk_0, *blk_1;
+	{
+		auto f = Img::create();
+		blk_0 = f.alloc_blk(e);
+		blk_1 = f.alloc_blk(e);
+	}
+
 	struct Frame {
 		HBITMAP hBitmap;
 		HDC hMemoryDC;
@@ -118,8 +125,8 @@ int main(int argc, char **argv)
 		Img frame_bmp;
 		Img frame;
 		uint8_t *cmp;
-		uint8_t *blk_0;
-		uint8_t *blk_1;
+		//uint8_t *blk_0;
+		//uint8_t *blk_1;
 		size_t cmp_size;
 
 		Frame(HDC hScreenDC) :
@@ -128,17 +135,17 @@ int main(int argc, char **argv)
 			frame_bmp_buf(width + 16, height),
 			frame_bmp(width, height),
 			frame(Img::create()),
-			cmp(frame.alloc_cmp(e)),
-			blk_0(frame.alloc_blk(e)),
-			blk_1(frame.alloc_blk(e))
+			cmp(frame.alloc_cmp(e))
+			//blk_0(frame.alloc_blk(e)),
+			//blk_1(frame.alloc_blk(e))
 		{
 		}
 		~Frame(void)
 		{
 			DeleteDC(hMemoryDC);
 			delete[] cmp;
-			delete[] blk_0;
-			delete[] blk_1;
+			//delete[] blk_0;
+			//delete[] blk_1;
 		}
 	};
 
@@ -154,8 +161,8 @@ int main(int argc, char **argv)
 		auto &frame = f.frame;
 
 		auto &cmp = f.cmp;
-		auto &blk_0 = f.blk_0;
-		auto &blk_1 = f.blk_1;
+		//auto &blk_0 = f.blk_0;
+		//auto &blk_1 = f.blk_1;
 		auto &cmp_size = f.cmp_size;
 		threads.emplace_back([&]() {
 			try {
