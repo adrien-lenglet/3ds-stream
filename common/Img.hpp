@@ -347,7 +347,7 @@ public:
 						}
 					}
 					pp_best_score /= e.blk_px_count;
-					if (pp_best_score < 16) {
+					if (pp_best_score < 64 * 64) {
 						is_ref = true;
 						ref = 1 + pp_best_ndx;
 						std::memcpy(cs, pp_best, sizeof(cs));

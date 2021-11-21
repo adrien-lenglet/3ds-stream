@@ -150,6 +150,8 @@ int main(int argc, char **argv)
 	};
 
 	Frame frames[3] {hScreenDC, hScreenDC, hScreenDC};
+	auto last_frame = std::chrono::high_resolution_clock::now();
+	std::mutex lag_mtx;
 
 	for (size_t i = 0; i < pp_depth; i++) {
 		auto &f = frames[i];
@@ -164,6 +166,26 @@ int main(int argc, char **argv)
 		//auto &blk_0 = f.blk_0;
 		//auto &blk_1 = f.blk_1;
 		auto &cmp_size = f.cmp_size;
+		threads.emplace_back([&](){
+			bool is_paused = false;
+			while (true) {
+				{
+					std::lock_guard l(lag_mtx);
+					auto now = std::chrono::high_resolution_clock::now();
+					auto delta = static_cast<std::chrono::duration<double>>(now - last_frame).count();
+					// pause the game when lag spike kicks in
+					bool is_lag = delta > 0.1;
+					if (is_lag) {
+						XINPUT_STATE state{};
+						state.Gamepad.wButtons = is_paused ? 0 : XINPUT_GAMEPAD_START;
+						vAssert(vigem_target_x360_update(vc, pad, *reinterpret_cast<XUSB_REPORT*>(&state.Gamepad)));
+						is_paused = true;
+					} else
+						is_paused = false;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
+		});
 		threads.emplace_back([&]() {
 			try {
 				while (true) {
@@ -248,6 +270,10 @@ int main(int argc, char **argv)
 							if (frame_ndx % 60 == 0)
 								std::printf("frame: %zu\n", frame_ndx);
 
+							{
+								std::lock_guard l(lag_mtx);
+								last_frame = std::chrono::high_resolution_clock::now();
+							}
 							/*auto now = std::chrono::high_resolution_clock::now();
 							auto delta = static_cast<std::chrono::duration<double>>(now - bef).count();
 							bef = now;
