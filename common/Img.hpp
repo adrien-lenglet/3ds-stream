@@ -44,7 +44,7 @@ struct Enc {
 	static constexpr size_t dw = 400;
 	static constexpr size_t dh = 240;
 	static constexpr size_t dblk_size = 16;
-	static constexpr size_t pstride = 6;
+	static constexpr size_t bfstride = sizeof(px) * 2;
 
 	static consteval Enc def(void)
 	{
@@ -66,7 +66,7 @@ struct Enc {
 			res.h
 		};
 		for (size_t i = 0; i < 8; i++) {
-			size_t v = base[i] * pstride;	// apply pixel stride
+			size_t v = base[i] * bfstride;	// apply pixel stride
 			for (size_t j = 0; j < 2; j++)
 				res.blk_off[i * 2 + j] = v;
 		}
@@ -243,12 +243,12 @@ public:
 
 	uint8_t *alloc_blk(const Enc &e)
 	{
-		size_t size = e.blk_count * 4;
+		size_t size = e.blk_count * Enc::bfstride;
 		return new uint8_t[size];
 	}
 
 	template <Enc e>
-	void cmp(const uint8_t *last, uint8_t *cur, uint8_t *dst)
+	uint16_t cmp(const uint8_t *last, uint8_t *cur, uint8_t *dst)	// frame cannot exceed 64 KiB
 	{
 		static constexpr size_t w = e.w, h = e.h;
 		static constexpr size_t blk_stride = e.blk_stride;
@@ -291,6 +291,7 @@ public:
 					}
 				std::memcpy(dst + coff, cs, sizeof(cs));
 			}
+		return 0;
 	}
 
 	void flip(uint8_t *dst)
@@ -304,28 +305,7 @@ public:
 	template <Enc e>
 	static void dcmp(const uint8_t *c, const uint8_t *last, uint8_t *cur, uint8_t *dst)
 	{
-		static constexpr size_t w = e.w, h = e.h;
-		static constexpr size_t blk_stride = e.blk_stride;
-		static constexpr size_t hs = e.blk_size / 8;
-		for (size_t i = 0; i < h; i++)
-			for (size_t j = 0; j < w; j++) {
-				auto addr_blk = [dst, i, j](size_t y, size_t x) {
-					return dst + ((j * e.blk_size + x) * Enc::dh + i * e.blk_size + y) * 3;
-				};
-				size_t coff = (i * w + j) * blk_stride;
-				for (size_t i = 0; i < e.blk_size; i++)
-					for (size_t j = 0; j < hs; j++) {
-						uint8_t v = c[coff + sizeof(px) * 2 + i * hs + j];
-						for (size_t k = 0; k < 8; k++) {
-							auto *s = c + coff + (v & (1 << k) ? sizeof(px) : 0);
-							auto c = addr_blk(i, j * 8 + k);
-							for (size_t i = 0; i < 3; i++)
-								c[i] = s[i];
-						}
-					}
-			}
-
-		/*{
+		{
 			static constexpr auto upck_rbg = [](uint16_t src, uint8_t *&dst)
 			{
 				*dst++ = (src & 0x003E) << 2;
@@ -336,11 +316,11 @@ public:
 			auto cr = cur;
 			uint8_t b = *c++;
 			bool bh = false;
-			static constexpr auto mx = e.blk_count * Enc::pstride;
-			for (size_t i = 0; i < mx; i += Enc::pstride) {
+			const uint8_t *mx = last + e.blk_count * Enc::bfstride;
+			for (; last < mx; last += Enc::bfstride) {
 				if (bh & 1) {	// blk in last frame
-					auto l = last + i + e.blk_off[b & 0x0F];
-					for (size_t i = 0; i < 3; i++)
+					auto l = last + e.blk_off[b & 0x0F];
+					for (size_t i = 0; i < Enc::bfstride; i++)
 						*cr++ = *l++;
 					if (bh)
 						b = *c++;
@@ -350,14 +330,14 @@ public:
 					}
 				} else {	// new blk data
 					if (bh) {
-						uint32_t v = reinterpret_cast<uint32_t*>(c);
+						uint32_t v = *reinterpret_cast<const uint32_t*>(c);
 						upck_rbg(b + ((v & 0x00000FFF) << 4), cr);
 						upck_rbg(b + ((v & 0x0FFFF000) >> 12), cr);
 						c += 4;
 						b = v >> 28;
 					} else {
-						upck_rbg(*reinterpret_cast<uint16_t*>(c++ - 1), cr);
-						upck_rbg(*reinterpret_cast<uint16_t*>(c), cr);
+						upck_rbg(*reinterpret_cast<const uint16_t*>(c++ - 1), cr);
+						upck_rbg(*reinterpret_cast<const uint16_t*>(c), cr);
 						c += 2;
 						b = *c++;
 					}
@@ -367,6 +347,30 @@ public:
 			// otherwise if b is high, skip it
 			if (!bh)
 				c--;
-		}*/
+		}
+
+		{
+			static constexpr size_t fbbstride_i = e.h * ((e.blk_size - 1) * e.blk_size) * sizeof(px);
+			static constexpr size_t fbbstride_j = e.blk_size * sizeof(px);
+			static constexpr size_t vs = e.blk_size / 8;
+			uint8_t *mx = cur + e.blk_count * Enc::bfstride;
+			// iterate through blocks, block palette and framebuffer wise
+			auto b = cur, fb = dst;
+			for (size_t i = 0; i < e.w; i++, fb += fbbstride_i)
+				for (size_t j = 0; j < e.h; j++, b += Enc::bfstride, fb += fbbstride_j) {
+					auto f = fb;
+					for (size_t i = 0; i < e.blk_size; i++, f += Enc::dh * sizeof(px)) {
+						auto fc = f;
+						for (size_t j = 0; j < vs; j++) {
+							auto v = *c++;
+							for (size_t k = 0; k < 8; k++) {
+								auto p = b + (v & (1 << k) ? sizeof(px) : 0);
+								for (size_t i = 0; i < 3; i++)
+									*fc++ = *p++;
+							}
+						}
+					}
+				}
+		}
 	}
 };
