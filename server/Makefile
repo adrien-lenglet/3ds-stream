@@ -1,4 +1,4 @@
-CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -Os -Wno-char-subscripts $(CXXFLAGS_EXTRA) -I src -I ../common -I ../dep/ViGEmClient/include
+CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -Os -Wno-char-subscripts $(CXXFLAGS_EXTRA) -D_3DSSTREAM_HOST -I src -I ../common -I ../dep/ViGEmClient/include
 #SANITIZE = true
 
 ifdef SANITIZE

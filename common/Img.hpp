@@ -2,6 +2,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <vector>
+#include <memory>
+#include <variant>
 
 static size_t align_up(size_t v, size_t al)
 {
@@ -16,6 +20,15 @@ template <typename T>
 static T min(T a, T b)
 {
 	if (a < b)
+		return a;
+	else
+		return b;
+}
+
+template <typename T>
+static T max(T a, T b)
+{
+	if (a > b)
 		return a;
 	else
 		return b;
@@ -88,6 +101,183 @@ struct Enc {
 				res.blk_off[i * 2 + j] = v;
 		}
 		return res;
+	}
+};
+
+struct HuffmanTable
+{
+	// decoding
+	bool *is_sym;	// is bit sequence covered
+	uint32_t *syms;	// bit sequence to symbol
+	size_t max_sym;	// valid array ndx for is_sym and syms
+
+	// encoding
+	bool *is_sym_enc;	// is symbol covered
+	uint32_t *syms_enc;	// symbol to bit sequence
+	uint8_t *syms_enc_bit_count;	// bit sequence length
+	size_t max_sym_enc;	// valid array ndx for is_sym_enc, syms_enc and syms_enc_bit_count
+
+	size_t model_size;	// compressed size, defined if built using sym_occ
+
+	struct SymProb {
+		uint32_t occ;
+		uint32_t sym;
+	};
+
+	// returns unsorted, cut to the right length list of all necessary symbols to assemble the table
+	static std::vector<SymProb> canonSym(const std::vector<SymProb> &csym_occ, size_t threshold, size_t zsymb)
+	{
+		std::map<uint32_t, uint32_t> mp;
+		bool has_one = false;
+		for (auto &s : csym_occ) {
+			mp[s.sym * s.occ] = s.sym;	// weight by bit count
+			if (s.sym == 1)
+				has_one = true;
+		}
+		std::vector<SymProb> res;
+		res.reserve(threshold + 2);	// overshoot for potential extra one
+		{
+			auto end = mp.rend();
+			size_t i = 0;
+			for (auto it = mp.rbegin(); it != end; it++) {
+				res.emplace_back(SymProb{it->first, it->second});
+				if (i++ >= threshold)
+					break;
+			}
+		}
+		res.insert(res.end(), SymProb{res[zsymb].occ - 1, 0});	// 0 symbol cannot have the most weight (least frequent when zsymb is max)
+		if (!has_one)
+			res.insert(res.end(), SymProb{res[0].occ + 1, 1});	// make sure we at least have a 1 symbol, make it obnioxiously likely if ever needed
+		return res;
+	}
+
+	// threshold is the number of symbols encoded in the table
+	// zsymb is the index after which symbol 0 will be inserted in range [0, threshold)
+	HuffmanTable(const std::vector<SymProb> &csym_occ, size_t threshold, size_t zsymb)
+	{
+		auto can = canonSym(csym_occ, threshold, zsymb);
+		struct Node {
+			uint32_t p;
+			std::variant<std::pair<Node*, Node*>, uint32_t> v;	// either node type, or symbol (leaf)
+
+			size_t max_bit_count(void) const
+			{
+				if (std::holds_alternative<uint32_t>(v))
+					return 0;
+				else {
+					auto &sub = std::get<std::pair<Node*, Node*>>(v);
+					return 1 + max(sub.first->max_bit_count(), sub.second->max_bit_count());
+				}
+			}
+
+			void write_table(HuffmanTable &dst, uint32_t cur_key, uint32_t cur_key_size)
+			{
+				if (std::holds_alternative<uint32_t>(v)) {
+					auto s = std::get<uint32_t>(v);
+					dst.is_sym[cur_key] = true;
+					dst.syms[cur_key] = s;
+
+					dst.is_sym_enc[s] = true;
+					dst.syms_enc[s] = cur_key;
+					dst.syms_enc_bit_count[s] = cur_key_size;
+				} else {
+					#ifdef _3DSSTREAM_HOST	// exceptions disabled on target
+					if (cur_key_size >= 32)
+						throw std::runtime_error("Table bit depth exceeded 32. How have you done this?!");
+					#endif
+					auto &sub = std::get<std::pair<Node*, Node*>>(v);
+					sub.first->write_table(dst, cur_key, cur_key_size + 1);
+					sub.first->write_table(dst, cur_key + (1 << cur_key_size), cur_key_size + 1);
+				}
+			}
+		};
+		std::vector<std::unique_ptr<Node>> nodes;
+		for (auto &c : can)
+			nodes.emplace_back(new Node {c.occ, c.sym});
+		for (size_t mx = nodes.size(); mx > 1; mx--) {
+			size_t first;
+			{
+				size_t min = static_cast<size_t>(-1);
+				for (size_t i = 0; i < mx; i++) {
+					auto cp = nodes[i]->p;
+					if (cp < min) {
+						first = i;
+						min = cp;
+					}
+				}
+			}
+			size_t second;
+			{
+				size_t min = static_cast<size_t>(-1);
+				for (size_t i = 0; i < mx; i++) {
+					if (i == first)
+						continue;
+					auto cp = nodes[i]->p;
+					if (cp < min) {
+						second = i;
+						min = cp;
+					}
+				}
+			}
+			nodes.emplace_back(new Node(*nodes[first]));
+			nodes.emplace_back(std::move(nodes[second]));
+			nodes.erase(nodes.begin() + second);
+			auto &f = nodes.rbegin()[0];
+			auto &s = nodes.rbegin()[1];
+			nodes[first]->p = f->p + s->p;
+			nodes[first]->v = std::pair<Node*, Node*>(&*f, &*s);
+		}
+		size_t max = 0;
+		for (auto &s : can)
+			if (s.sym > max)
+				max = s.sym;
+		max_sym_enc = max;
+		is_sym_enc = new bool[max_sym_enc + 1] {};
+		syms_enc = new uint32_t[max_sym_enc + 1];
+		syms_enc_bit_count = new uint8_t[max_sym_enc + 1];
+
+		auto max_bit_count = nodes[0]->max_bit_count();
+		max_sym = (2 << (max_bit_count + 1)) - 1;
+		is_sym = new bool[max_sym + 1] {};
+		syms = new uint32_t[max_sym + 1] {};
+
+		nodes[0]->write_table(*this, 0, 0);
+	}
+
+	~HuffmanTable()
+	{
+		delete[] is_sym;
+		delete[] syms;
+
+		delete[] is_sym_enc;
+		delete[] syms_enc;
+		delete[] syms_enc_bit_count;
+	}
+
+	static HuffmanTable optimize(const std::map<uint32_t, uint32_t> &sym_occ)	// <occurence count, symbol>
+	{
+		std::vector<SymProb> syms;
+		syms.reserve(sym_occ.size());
+		{
+			auto end = sym_occ.rend();
+			for (auto it = sym_occ.rbegin(); it != end; it++)
+				syms.emplace_back(SymProb{it->first, it->second});
+		}
+		size_t min_i, min_j = min_i;
+		size_t min_size = static_cast<size_t>(-1);
+		for (size_t i = 4; i < syms.size(); i++)
+			for (size_t j = 0; j < i; j++) {
+				auto size = HuffmanTable(syms, i, j).model_size;
+				if (size < min_size) {
+					min_size = size;
+					min_i = i;
+					min_j = j;
+				}
+			}
+		if (min_size == static_cast<size_t>(-1))
+			return HuffmanTable(syms, syms.size(), syms.size() - 1);
+		else
+			return HuffmanTable(syms, min_i, min_j);
 	}
 };
 
@@ -269,7 +459,7 @@ public:
 	}
 
 	template <Enc e>
-	uint16_t cmp(const uint8_t *last, uint8_t *cur, uint8_t *dst)	// frame cannot exceed 64 KiB
+	uint16_t cmp(const uint8_t *last, uint8_t *cur, uint8_t *dst, size_t frame_ndx)	// frame cannot exceed 64 KiB
 	{
 		static constexpr size_t dbpp_size = Enc::dw * Enc::dh / 8;
 		auto dst_base = dst;
@@ -395,6 +585,33 @@ public:
 			}
 		if (ch)
 			dst++;
+		if (frame_ndx % 60 == 0) {
+			std::map<size_t, size_t> m;
+			bool cur = false;
+			size_t count = 0;
+			for (size_t i = 0; i < e.w; i++)
+				for (size_t j = 0; j < 4; j++)
+					for (size_t k = 0; k < e.h; k++) {
+						auto v = dbpp_base[(i * e.h + k) * 2 + j / 2];
+						if (j & 1)
+							v >>= 4;
+						for (size_t i = 1; i < 1 << 4; i <<= 1) {
+							auto c = (v & i) != 0;
+							if (c == cur) {
+								count++;
+							} else {
+								m[count]++;
+								count = 1;
+								cur = c;
+							}
+						}
+					}
+			std::map<uint32_t, uint32_t> mr;
+			for (auto &p : m)
+				mr[p.second] = p.first;
+			auto table = HuffmanTable::optimize(mr);
+			std::printf("BEST COMPR: %zu (raw: %zu); max sym: %u\n", table.model_size, m_w * m_h / 8, table.max_sym);
+		}
 		std::memmove(dst, dbpp_base, dbpp_size);
 		dst += dbpp_size;
 		size_t size = dst - dst_base;

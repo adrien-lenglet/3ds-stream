@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 						std::lock_guard l(enc_mtx);
 						frame_bmp.load(frame_bmp_buf.get_data());
 						frame_bmp.sample(frame);
-						cmp_size = frame.cmp<e>(blk_0, blk_1, cmp);
+						cmp_size = frame.cmp<e>(blk_0, blk_1, cmp, frame_ndx);
 						auto t = blk_0;
 						blk_0 = blk_1;
 						blk_1 = t;
