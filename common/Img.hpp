@@ -247,7 +247,7 @@ struct HuffmanTable
 			uint32_t acc = s.sym;
 			while (true) {
 				uint32_t sm;
-				for (sm = min(acc, max_sym);; sm--)
+				for (sm = min(acc, max_sym_enc);; sm--)
 					if (is_sym_enc[sm])
 						break;
 				size += syms_enc_bit_count[sm];
@@ -607,23 +607,17 @@ public:
 			std::map<size_t, size_t> m;
 			bool cur = false;
 			size_t count = 0;
-			for (size_t i = 0; i < e.w; i++)
-				for (size_t j = 0; j < 4; j++)
-					for (size_t k = 0; k < e.h; k++) {
-						auto v = dbpp_base[(i * e.h + k) * 2 + j / 2];
-						if (j & 1)
-							v >>= 4;
-						for (size_t i = 1; i < 1 << 4; i <<= 1) {
-							auto c = (v & i) != 0;
-							if (c == cur) {
-								count++;
-							} else {
-								m[count]++;
-								count = 1;
-								cur = c;
-							}
-						}
+			for (auto p = dbpp_base; p < dbpp_base + dbpp_size; p++)
+				for (size_t i = 1; i < 1 << 8; i <<= 1) {
+					auto c = (*p & i) != 0;
+					if (c == cur) {
+						count++;
+					} else {
+						m[count]++;
+						count = 1;
+						cur = c;
 					}
+				}
 			std::map<uint32_t, uint32_t> mr;
 			for (auto &p : m)
 				mr[p.second] = p.first;
