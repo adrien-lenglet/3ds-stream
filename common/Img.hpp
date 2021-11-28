@@ -106,6 +106,8 @@ struct Enc {
 
 struct HuffmanTable
 {
+	size_t max_bit_count;
+
 	// decoding
 	bool *is_sym;	// is bit sequence covered
 	uint32_t *syms;	// bit sequence to symbol
@@ -172,12 +174,15 @@ struct HuffmanTable
 			{
 				if (std::holds_alternative<uint32_t>(v)) {
 					auto s = std::get<uint32_t>(v);
-					dst.is_sym[cur_key] = true;
-					dst.syms[cur_key] = s;
-
 					dst.is_sym_enc[s] = true;
 					dst.syms_enc[s] = cur_key;
 					dst.syms_enc_bit_count[s] = cur_key_size;
+
+					cur_key += 1 << cur_key_size;
+					if (dst.is_sym[cur_key])
+						std::printf("COLLISION at %u\n", cur_key);
+					dst.is_sym[cur_key] = true;
+					dst.syms[cur_key] = s;
 				} else {
 					#ifdef _3DSSTREAM_HOST	// exceptions disabled on target
 					if (cur_key_size >= 32)
@@ -234,7 +239,7 @@ struct HuffmanTable
 		syms_enc = new uint32_t[max_sym_enc + 1];
 		syms_enc_bit_count = new uint8_t[max_sym_enc + 1];
 
-		auto max_bit_count = nodes[0]->max_bit_count();
+		max_bit_count = nodes[0]->max_bit_count();
 		max_sym = (2 << (max_bit_count + 1)) - 1;
 		is_sym = new bool[max_sym + 1] {};
 		syms = new uint32_t[max_sym + 1] {};
@@ -285,17 +290,120 @@ struct HuffmanTable
 		size_t min_size = static_cast<size_t>(-1);
 		for (size_t i = 4; i < syms.size(); i++)
 			for (size_t j = 0; j < i; j++) {
-				auto size = HuffmanTable(syms, i, j).model_size;
-				if (size < min_size) {
-					min_size = size;
-					min_i = i;
-					min_j = j;
+				auto t = HuffmanTable(syms, i, j);
+				if (t.max_bit_count <= 8) {
+					auto size = t.model_size;
+					if (size < min_size) {
+						min_size = size;
+						min_i = i;
+						min_j = j;
+					}
 				}
 			}
 		if (min_size == static_cast<size_t>(-1))
 			return HuffmanTable(syms, syms.size(), syms.size() - 1);
 		else
 			return HuffmanTable(syms, min_i, min_j);
+	}
+
+	bool validate(const uint8_t *buf, const size_t size)
+	{
+		std::vector<uint8_t> c;
+		{
+			uint32_t csize = 0;
+			uint32_t cbuf = 0;
+			auto wc = [&](uint32_t size, uint32_t v) {
+				cbuf += v << csize;
+				csize += size;
+				while (csize >= 8) {
+					c.emplace_back(cbuf & 0xFF);
+					cbuf >>= 8;
+					csize -= 8;
+				}
+			};
+			auto ws = [&](uint32_t count) {
+				uint32_t acc = count;
+				while (true) {
+					uint32_t sm;
+					for (sm = min(acc, max_sym_enc);; sm--)
+						if (is_sym_enc[sm])
+							break;
+					wc(syms_enc_bit_count[sm], syms_enc[sm]);
+					acc -= sm;
+					if (acc == 0)
+						break;
+					wc(syms_enc_bit_count[0], syms_enc[0]);
+				}
+			};
+			bool cur = false;
+			size_t count = 0;
+			for (auto p = buf; p < buf + size; p++)
+				for (size_t i = 1; i < 1 << 8; i <<= 1) {
+					auto c = (*p & i) != 0;
+					if (c == cur)
+						count++;
+					else {
+						ws(count);
+						count = 1;
+						cur = c;
+					}
+				}
+			if (count > 0)
+				ws(count);
+			if (csize > 0)
+				c.emplace_back(cbuf & 0xFF);
+		}
+		std::vector<uint8_t> d;
+		{
+			uint32_t masks[9] {};
+			for (size_t i = 1; i <= 8; i++)
+				for (size_t j = 0; j < i; j++)
+					masks[i] += 1 << j;
+
+			uint32_t dsize = 0;
+			uint32_t dbuf = 0;
+			auto wd = [&](uint32_t size, uint32_t v) {
+				dbuf += v << dsize;
+				dsize += size;
+				while (dsize >= 8) {
+					d.emplace_back(dbuf & 0xFF);
+					dbuf >>= 8;
+					dsize -= 8;
+				}
+			};
+			auto wp = [&](uint32_t size, uint32_t v) {
+				uint32_t its = size / 8;
+				for (size_t i = 0; i < its; i++)
+					wd(8, v);
+				uint32_t md = size % 8;
+				if (md)
+					wd(md, v & masks[md]);
+			};
+			auto p = c.data();
+			uint32_t bsize = 0;
+			uint32_t buf = 0;
+			bool state = false;
+			while (true) {
+				if (bsize < 8) {
+					buf += *p++ << bsize;
+					bsize += 8;
+				}
+				for (size_t i = 1; i <= 8; i++) {
+					uint32_t v = (buf & masks[i]) + (1 << i);
+					if (is_sym[v]) {
+						wp(syms[v], state ? 0xFF : 0x00);
+						bsize -= i;
+						buf >>= i;
+						state = !state;
+						if (d.size() >= size)
+							goto done;
+						break;
+					}
+				}
+			}
+			done:;
+		}
+		return std::memcmp(buf, d.data(), size) == 0;
 	}
 };
 
@@ -622,7 +730,11 @@ public:
 			for (auto &p : m)
 				mr[p.second] = p.first;
 			auto table = HuffmanTable::optimize(mr);
-			std::printf("BEST COMPR: %zu (raw: %zu); max sym: %u\n", table.model_size, m_w * m_h / 8, table.max_sym);
+			std::printf("BEST COMPR: %zu (raw: %zu); max sym: %u, valid: %d\n",
+				table.model_size,
+				dbpp_size,
+				table.max_sym,
+				table.validate(dbpp_base, dbpp_size));
 		}
 		std::memmove(dst, dbpp_base, dbpp_size);
 		dst += dbpp_size;
