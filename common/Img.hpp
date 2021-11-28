@@ -109,13 +109,13 @@ struct HuffmanTable
 	// decoding
 	bool *is_sym;	// is bit sequence covered
 	uint32_t *syms;	// bit sequence to symbol
-	size_t max_sym;	// valid array ndx for is_sym and syms
+	uint32_t max_sym;	// valid array ndx for is_sym and syms
 
 	// encoding
 	bool *is_sym_enc;	// is symbol covered
 	uint32_t *syms_enc;	// symbol to bit sequence
 	uint8_t *syms_enc_bit_count;	// bit sequence length
-	size_t max_sym_enc;	// valid array ndx for is_sym_enc, syms_enc and syms_enc_bit_count
+	uint32_t max_sym_enc;	// valid array ndx for is_sym_enc, syms_enc and syms_enc_bit_count
 
 	size_t model_size;	// compressed size, defined if built using sym_occ
 
@@ -129,11 +129,8 @@ struct HuffmanTable
 	{
 		std::map<uint32_t, uint32_t> mp;
 		bool has_one = false;
-		for (auto &s : csym_occ) {
+		for (auto &s : csym_occ)
 			mp[s.sym * s.occ] = s.sym;	// weight by bit count
-			if (s.sym == 1)
-				has_one = true;
-		}
 		std::vector<SymProb> res;
 		res.reserve(threshold + 2);	// overshoot for potential extra one
 		{
@@ -141,6 +138,8 @@ struct HuffmanTable
 			size_t i = 0;
 			for (auto it = mp.rbegin(); it != end; it++) {
 				res.emplace_back(SymProb{it->first, it->second});
+				if (it->second == 1)
+					has_one = true;
 				if (i++ >= threshold)
 					break;
 			}
@@ -155,7 +154,6 @@ struct HuffmanTable
 	// zsymb is the index after which symbol 0 will be inserted in range [0, threshold)
 	HuffmanTable(const std::vector<SymProb> &csym_occ, size_t threshold, size_t zsymb)
 	{
-		auto can = canonSym(csym_occ, threshold, zsymb);
 		struct Node {
 			uint32_t p;
 			std::variant<std::pair<Node*, Node*>, uint32_t> v;	// either node type, or symbol (leaf)
@@ -187,10 +185,11 @@ struct HuffmanTable
 					#endif
 					auto &sub = std::get<std::pair<Node*, Node*>>(v);
 					sub.first->write_table(dst, cur_key, cur_key_size + 1);
-					sub.first->write_table(dst, cur_key + (1 << cur_key_size), cur_key_size + 1);
+					sub.second->write_table(dst, cur_key + (1 << cur_key_size), cur_key_size + 1);
 				}
 			}
 		};
+		auto can = canonSym(csym_occ, threshold, zsymb);
 		std::vector<std::unique_ptr<Node>> nodes;
 		for (auto &c : can)
 			nodes.emplace_back(new Node {c.occ, c.sym});
@@ -219,13 +218,12 @@ struct HuffmanTable
 					}
 				}
 			}
-			nodes.emplace_back(new Node(*nodes[first]));
+			nodes.emplace_back(nodes[first].release());
 			nodes.emplace_back(std::move(nodes[second]));
-			nodes.erase(nodes.begin() + second);
 			auto &f = nodes.rbegin()[0];
 			auto &s = nodes.rbegin()[1];
-			nodes[first]->p = f->p + s->p;
-			nodes[first]->v = std::pair<Node*, Node*>(&*f, &*s);
+			nodes[first] = std::unique_ptr<Node>(new Node {f->p + s->p, std::pair<Node*, Node*>(&*f, &*s)});
+			nodes.erase(nodes.begin() + second);
 		}
 		size_t max = 0;
 		for (auto &s : can)
@@ -242,6 +240,26 @@ struct HuffmanTable
 		syms = new uint32_t[max_sym + 1] {};
 
 		nodes[0]->write_table(*this, 0, 0);
+
+		model_size = 0;
+		for (auto &s : csym_occ) {
+			uint32_t size = 0;
+			uint32_t acc = s.sym;
+			while (true) {
+				uint32_t sm;
+				for (sm = min(acc, max_sym);; sm--)
+					if (is_sym_enc[sm])
+						break;
+				size += syms_enc_bit_count[sm];
+				acc -= sm;
+				if (acc == 0)
+					break;
+				size += syms_enc_bit_count[0];
+			}
+
+			model_size += size * s.occ;
+		}
+		model_size /= 8;
 	}
 
 	~HuffmanTable()
@@ -263,7 +281,7 @@ struct HuffmanTable
 			for (auto it = sym_occ.rbegin(); it != end; it++)
 				syms.emplace_back(SymProb{it->first, it->second});
 		}
-		size_t min_i, min_j = min_i;
+		size_t min_i, min_j;
 		size_t min_size = static_cast<size_t>(-1);
 		for (size_t i = 4; i < syms.size(); i++)
 			for (size_t j = 0; j < i; j++) {
