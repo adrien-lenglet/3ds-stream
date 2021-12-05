@@ -904,7 +904,7 @@ public:
 		}
 		if (ch)
 			gdst++;
-		std::memcpy(gdst, buf.dbpp, dbpp_size);
+		gdst = dh.encode(gdst, buf.dbpp, dbpp_size);
 		if (frame_ndx % 60 == 0 && false) {
 			/*std::map<size_t, size_t> m;
 			bool cur = false;
@@ -936,7 +936,6 @@ public:
 				table.max_sym,
 				valid);
 		}
-		gdst += dbpp_size;
 		size_t size = gdst - dst_base;
 		*reinterpret_cast<uint16_t*>(dst_base) = size - 2;
 		return size;
@@ -952,7 +951,7 @@ public:
 	}
 
 	template <Enc e>
-	static void dcmp(const uint8_t *c, const uint8_t *last, uint8_t *cur, uint8_t *dst)
+	static void dcmp(const uint8_t *c, const uint8_t *last, uint8_t *cur, uint8_t *dst, BlksBuf &buf)
 	{
 		{
 			static constexpr auto upck_rbg = [](uint16_t src, uint8_t *&dst)
@@ -998,6 +997,9 @@ public:
 			if (!bh)
 				c--;
 		}
+		static constexpr size_t dbpp_size = Enc::dw * Enc::dh / 8;
+		dh.decode(buf.dbpp, dbpp_size, c);
+		c = buf.dbpp;
 
 		{
 			static constexpr size_t fbbstride_i = e.h * ((e.blk_size - 1) * e.blk_size) * sizeof(px);

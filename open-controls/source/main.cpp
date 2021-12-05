@@ -190,6 +190,7 @@ int main(int argc, char **argv)
 	static uint8_t *cmp[2];
 	for (size_t i = 0; i < 2; i++)
 		cmp[i] = frame.alloc_cmp(e);
+	static auto buf = BlksBuf();
 	static auto blk_0 = frame.alloc_blk(e);
 	static auto blk_1 = frame.alloc_blk(e);
 
@@ -236,7 +237,7 @@ int main(int argc, char **argv)
 				if (!disc) {
 					disp_mtx[cd].lock();
 
-					Img::dcmp<e>(cmp[cd], blk_0, blk_1, fb);
+					Img::dcmp<e>(cmp[cd], blk_0, blk_1, fb, buf);
 					auto t = blk_0;
 					blk_0 = blk_1;
 					blk_1 = t;
