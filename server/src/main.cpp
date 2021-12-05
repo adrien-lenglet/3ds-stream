@@ -149,9 +149,10 @@ int main(int argc, char **argv)
 		}
 	};
 
-	Frame frames[3] {hScreenDC, hScreenDC, hScreenDC};
+	Frame frames[pp_depth] {hScreenDC, hScreenDC, hScreenDC};
 	auto last_frame = std::chrono::high_resolution_clock::now();
 	std::mutex lag_mtx;
+	auto buf = Img::Buf();
 
 	for (size_t i = 0; i < pp_depth; i++) {
 		auto &f = frames[i];
@@ -216,7 +217,7 @@ int main(int argc, char **argv)
 						std::lock_guard l(enc_mtx);
 						frame_bmp.load(frame_bmp_buf.get_data());
 						frame_bmp.sample(frame);
-						cmp_size = frame.cmp<e>(blk_0, blk_1, cmp, frame_ndx);
+						cmp_size = frame.cmp<e>(blk_0, blk_1, cmp, frame_ndx, buf);
 						auto t = blk_0;
 						blk_0 = blk_1;
 						blk_1 = t;
