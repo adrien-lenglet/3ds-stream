@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 	Frame frames[pp_depth] {hScreenDC, hScreenDC, hScreenDC};
 	auto last_frame = std::chrono::high_resolution_clock::now();
 	std::mutex lag_mtx;
-	auto buf = Img::Buf();
+	auto buf = BlksBuf();
 
 	for (size_t i = 0; i < pp_depth; i++) {
 		auto &f = frames[i];

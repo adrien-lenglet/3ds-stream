@@ -476,6 +476,49 @@ static inline auto dh = HuffmanTable{8, new bool[0x9] {0x0, 0x0, 0x0, 0x0, 0x0, 
 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1}, new uint32_t[0x121] {0x28, 0x6, 0x5, 0x2, 0x1e, 0x39, 0x19, 0x4, 0x9, 0x3b, 0x60, 0x11, 0x1, 0x31, 0x0, 0x50, 0x7, 0xe, 0x0, 0x18, 0x1b, 0xdb, 0x0, 0xb8, 0x0, 0x0, 0x0, 0x20, 0x0, 0x0, 0x0, 0x30, 0xc, 0x24, 0x70, 0xb, 0x0, 0xf1, 0x0, 0x38, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3, 0x0, 0x10, 0x78, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x14, 0x0, 0x71, 0x2b, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2e, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x64, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x6b, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xa0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xb0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5b}, new uint8_t[0x121] {0x6, 0x4, 0x3, 0x3, 0x5, 0x6, 0x6, 0x6, 0x5, 0x6, 0x7, 0x6, 0x5, 0x7, 0x0, 0x7, 0x3, 0x6, 0x6, 0x6, 0x7, 0x8, 0x0, 0x8, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0, 0x0, 0x8, 0x4, 0x7, 0x7, 0x6, 0x0, 0x8, 0x0, 0x8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x4, 0x0, 0x7, 0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5, 0x0, 0x8, 0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x6, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x6, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 
 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x8}, 0x120, 0x21ec};
 
+struct BlksBuf {
+	struct Blk {
+		uint8_t nibs[8];
+		uint8_t nib_count = 0;
+	};
+	Blk *blks = new Blk[Enc::def().blk_count];
+	uint8_t *dbpp = new uint8_t[Enc::dw * Enc::dh / 8];
+
+	~BlksBuf(void)
+	{
+		delete[] blks;
+		delete[] dbpp;
+	}
+};
+
+struct pxd {
+	double data[3];
+	size_t i = 0;
+
+	pxd(void)
+	{
+		for (size_t i = 0; i < 3; i++)
+			data[i] = 0.0;
+	}
+
+	void inc(const px &p)
+	{
+		for (size_t i = 0; i < 3; i++)
+			data[i] = (data[i] * static_cast<double>(i) + p.data[i]) / static_cast<double>(i + 1);
+		i++;
+	}
+
+	px out(void) const
+	{
+		uint8_t d[3]{
+			static_cast<uint8_t>(data[0]),
+			static_cast<uint8_t>(data[1]),
+			static_cast<uint8_t>(data[2])
+		};
+		return px(d);
+	}
+};
+
 #ifdef _3DSSTREAM_HOST
 template <size_t PoolSize, typename ...Args>
 class Par {
@@ -483,7 +526,7 @@ class Par {
 	std::condition_variable m_cv;
 	std::mutex m_mtx;
 	std::optional<size_t> m_range;
-	std::tuple<Args...> m_inv;
+	std::optional<std::tuple<Args...>> m_inv;
 
 	std::condition_variable m_cv_compl;
 	std::mutex m_mtx_compl;
@@ -491,6 +534,12 @@ class Par {
 
 	std::condition_variable m_cv_reset;
 	std::mutex m_mtx_reset;
+
+	template <typename Fn, size_t ...Idx>
+	void apply_impl(Fn &&fn, size_t j, std::index_sequence<Idx...>)
+	{
+		fn(j, std::get<Idx>(*m_inv)...);
+	}
 
 public:
 	template <typename Fun>
@@ -512,7 +561,7 @@ public:
 					}
 					size_t its = 0;
 					for (size_t j = i; j < range; j += PoolSize, its++)
-						fn(j, std::get<Args>(m_inv)...);
+						apply_impl(fn, j, std::make_index_sequence<sizeof...(Args)>{});
 					{
 						std::lock_guard l(m_mtx_compl);
 						m_compl += its;
@@ -527,7 +576,7 @@ public:
 	}
 
 	template <size_t Size>
-	void dispatch(Args &&...args)
+	void dispatch(Args ...args)
 	{
 		{
 			std::lock_guard l(m_mtx);
@@ -548,9 +597,125 @@ public:
 	}
 };
 
-static auto inv = [](size_t) {
+void cmp_pblk(size_t i, const uint8_t *glast, uint8_t *gcur, uint8_t *data, BlksBuf &buf)
+{
+	static constexpr auto e = Enc::def();
+	static constexpr size_t vs = e.blk_size / 8;
+	auto dbpp = buf.dbpp + i * e.h * 2;
+	auto cb = buf.blks + i * e.h;
+	auto last = glast + i * e.h * Enc::bfstride;
+	auto cur = gcur + i * e.h * Enc::bfstride;
+	auto last_base = glast;
+	auto last_end = glast + e.blk_count * Enc::bfstride;
+	for (size_t j = 0; j < e.h; j++, last += Enc::bfstride, cur += Enc::bfstride, cb++) {
+		auto addr_blk = [data, i, j](size_t x, size_t y) {
+			return data + ((j * e.blk_size + y) * Enc::dw + i * e.blk_size + x) * 3;
+		};
+
+		px cs[2] {
+			addr_blk(e.blk_size / 4, e.blk_size / 4),
+			addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
+		};
+		static_assert(Enc::bfstride == sizeof(cs), "Palette mismatch");
+
+		for (size_t i = 0; i < 4; i++) {
+			pxd pd[2];
+			for (size_t i = 0; i < e.blk_size; i++)
+				for (size_t j = 0; j < e.blk_size; j++) {
+					auto c = px(addr_blk(i, j));
+					if (c.dst(cs[0]) < c.dst(cs[1]))
+						pd[0].inc(c);
+					else
+						pd[1].inc(c);
+				}
+			for (size_t i = 0; i < 2; i++)
+				cs[i] = pd[i].out();
+		}
+		bool is_ref = false;
+		uint8_t ref;
+
+		{
+			px pp_best[2] {
+				addr_blk(e.blk_size / 4, e.blk_size / 4),
+				addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
+			};
+			size_t pp_best_ndx;
+			size_t pp_best_score = static_cast<size_t>(-1);
+			for (size_t i = 0; i < 16; i += 2) {
+				auto p = last + e.blk_off[i];
+				if (!(p >= last_base && p < last_end))
+					continue;
+				px pp[2] {
+					addr_blk(e.blk_size / 4, e.blk_size / 4),
+					addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
+				};
+				std::memcpy(pp, p, sizeof(pp));
+				size_t s = 0;
+				for (size_t i = 0; i < e.blk_size; i++)
+					for (size_t j = 0; j < e.blk_size; j++) {
+						auto c = px(addr_blk(i, j));
+						s += min(c.dst(pp[0]), c.dst(pp[1]));
+					}
+				if (s < pp_best_score) {
+					pp_best_ndx = i;
+					pp_best_score = s;
+					std::memcpy(pp_best, pp, sizeof(pp_best));
+				}
+			}
+			pp_best_score /= e.blk_px_count;
+			if (pp_best_score < 64 * 64) {
+				is_ref = true;
+				ref = 1 + pp_best_ndx;
+				std::memcpy(cs, pp_best, sizeof(cs));
+			}
+		}
+
+		if constexpr (e.blk_size == 4) {
+			for (size_t i = 0; i < e.blk_size / 2; i++) {
+				uint8_t v = 0;
+				for (size_t k = 0; k < 4; k++) {
+					auto c = px(addr_blk(i * 2, k));
+					if (c.dst(cs[0]) > c.dst(cs[1]))
+						v |= (1 << k);
+				}
+				for (size_t k = 4; k < 8; k++) {
+					auto c = px(addr_blk(i * 2 + 1, k - 4));
+					if (c.dst(cs[0]) > c.dst(cs[1]))
+						v |= (1 << k);
+				}
+				*dbpp++ = v;
+			}
+		} else {
+			for (size_t i = 0; i < e.blk_size; i++)
+				for (size_t j = 0; j < vs; j++) {
+					uint8_t v = 0;
+					for (size_t k = 0; k < 8; k++) {
+						auto c = px(addr_blk(i, j * 8 + k));
+						if (c.dst(cs[0]) > c.dst(cs[1]))
+							v |= (1 << k);
+					}
+					*dbpp++ = v;
+				}
+		}
+		std::memcpy(cur, cs, sizeof(cs));
+		*cb = BlksBuf::Blk();
+		auto w_nib = [&](uint8_t v) {
+			cb->nibs[cb->nib_count++] = v;
+		};
+		if (is_ref)
+			w_nib(ref);
+		else
+			for (size_t i = 0; i < 2; i++) {
+				auto c = cs[i].cf1r5g5b5(0);
+				for (size_t i = 0; i < 4; i++) {
+					size_t o = i * 4;
+					w_nib((c & (0x0F << o)) >> o);
+				}
+			}
+	}
 };
-static Par<16> enc_par(inv);
+using ParCmp = Par<16, const uint8_t *, uint8_t *, uint8_t *, BlksBuf &>;
+static auto enc_par = ParCmp(cmp_pblk);
 #endif
 
 class Img
@@ -666,34 +831,6 @@ public:
 	}
 #endif
 
-	struct pxd {
-		double data[3];
-		size_t i = 0;
-
-		pxd(void)
-		{
-			for (size_t i = 0; i < 3; i++)
-				data[i] = 0.0;
-		}
-
-		void inc(const px &p)
-		{
-			for (size_t i = 0; i < 3; i++)
-				data[i] = (data[i] * static_cast<double>(i) + p.data[i]) / static_cast<double>(i + 1);
-			i++;
-		}
-
-		px out(void) const
-		{
-			uint8_t d[3]{
-				static_cast<uint8_t>(data[0]),
-				static_cast<uint8_t>(data[1]),
-				static_cast<uint8_t>(data[2])
-			};
-			return px(d);
-		}
-	};
-
 	void sample(Img &dst)
 	{
 		static auto nr = [](size_t i, size_t s) {
@@ -730,143 +867,14 @@ public:
 		return res;
 	}
 
-	struct Buf {
-		struct Blk {
-			uint8_t nibs[8];
-			uint8_t nib_count = 0;
-		};
-		Blk *blks = new Blk[Enc::def().blk_count];
-		uint8_t *dbpp = new uint8_t[Enc::dw * Enc::dh / 8];
-
-		~Buf(void)
-		{
-			delete[] blks;
-			delete[] dbpp;
-		}
-	};
-
+	#ifdef _3DSSTREAM_HOST
 	template <Enc e>
-	uint16_t cmp(const uint8_t *glast, uint8_t *gcur, uint8_t *gdst, size_t frame_ndx, Buf &buf)	// frame cannot exceed 64 KiB
+	uint16_t cmp(const uint8_t *glast, uint8_t *gcur, uint8_t *gdst, size_t frame_ndx, BlksBuf &buf)	// frame cannot exceed 64 KiB
 	{
 		static constexpr size_t dbpp_size = Enc::dw * Enc::dh / 8;
-		static constexpr size_t vs = e.blk_size / 8;
 		auto dst_base = gdst;
 		gdst += 2;
-		auto data = m_data;
-		const uint8_t* const last_base = glast;
-		const uint8_t* const last_end = glast + e.blk_count * Enc::bfstride;
-		for (size_t i = 0; i < e.w; i++) {
-			auto dbpp = buf.dbpp + i * e.h * 2;
-			auto cb = buf.blks + i * e.h;
-			auto last = glast + i * e.h * Enc::bfstride;
-			auto cur = gcur + i * e.h * Enc::bfstride;
-			for (size_t j = 0; j < e.h; j++, last += Enc::bfstride, cur += Enc::bfstride, cb++) {
-				auto addr_blk = [data, i, j](size_t x, size_t y) {
-					return data + ((j * e.blk_size + y) * Enc::dw + i * e.blk_size + x) * 3;
-				};
-
-				px cs[2] {
-					addr_blk(e.blk_size / 4, e.blk_size / 4),
-					addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
-				};
-				static_assert(Enc::bfstride == sizeof(cs), "Palette mismatch");
-
-				for (size_t i = 0; i < 4; i++) {
-					pxd pd[2];
-					for (size_t i = 0; i < e.blk_size; i++)
-						for (size_t j = 0; j < e.blk_size; j++) {
-							auto c = px(addr_blk(i, j));
-							if (c.dst(cs[0]) < c.dst(cs[1]))
-								pd[0].inc(c);
-							else
-								pd[1].inc(c);
-						}
-					for (size_t i = 0; i < 2; i++)
-						cs[i] = pd[i].out();
-				}
-				bool is_ref = false;
-				uint8_t ref;
-
-				{
-					px pp_best[2] {
-						addr_blk(e.blk_size / 4, e.blk_size / 4),
-						addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
-					};
-					size_t pp_best_ndx;
-					size_t pp_best_score = static_cast<size_t>(-1);
-					for (size_t i = 0; i < 16; i += 2) {
-						auto p = last + e.blk_off[i];
-						if (!(p >= last_base && p < last_end))
-							continue;
-						px pp[2] {
-							addr_blk(e.blk_size / 4, e.blk_size / 4),
-							addr_blk(e.blk_size * 3 / 4, e.blk_size * 3 / 4)
-						};
-						std::memcpy(pp, p, sizeof(pp));
-						size_t s = 0;
-						for (size_t i = 0; i < e.blk_size; i++)
-							for (size_t j = 0; j < e.blk_size; j++) {
-								auto c = px(addr_blk(i, j));
-								s += min(c.dst(pp[0]), c.dst(pp[1]));
-							}
-						if (s < pp_best_score) {
-							pp_best_ndx = i;
-							pp_best_score = s;
-							std::memcpy(pp_best, pp, sizeof(pp_best));
-						}
-					}
-					pp_best_score /= e.blk_px_count;
-					if (pp_best_score < 64 * 64) {
-						is_ref = true;
-						ref = 1 + pp_best_ndx;
-						std::memcpy(cs, pp_best, sizeof(cs));
-					}
-				}
-
-				if constexpr (e.blk_size == 4) {
-					for (size_t i = 0; i < e.blk_size / 2; i++) {
-						uint8_t v = 0;
-						for (size_t k = 0; k < 4; k++) {
-							auto c = px(addr_blk(i * 2, k));
-							if (c.dst(cs[0]) > c.dst(cs[1]))
-								v |= (1 << k);
-						}
-						for (size_t k = 4; k < 8; k++) {
-							auto c = px(addr_blk(i * 2 + 1, k - 4));
-							if (c.dst(cs[0]) > c.dst(cs[1]))
-								v |= (1 << k);
-						}
-						*dbpp++ = v;
-					}
-				} else {
-					for (size_t i = 0; i < e.blk_size; i++)
-						for (size_t j = 0; j < vs; j++) {
-							uint8_t v = 0;
-							for (size_t k = 0; k < 8; k++) {
-								auto c = px(addr_blk(i, j * 8 + k));
-								if (c.dst(cs[0]) > c.dst(cs[1]))
-									v |= (1 << k);
-							}
-							*dbpp++ = v;
-						}
-				}
-				std::memcpy(cur, cs, sizeof(cs));
-				*cb = Buf::Blk();
-				auto w_nib = [&](uint8_t v) {
-					cb->nibs[cb->nib_count++] = v;
-				};
-				if (is_ref)
-					w_nib(ref);
-				else
-					for (size_t i = 0; i < 2; i++) {
-						auto c = cs[i].cf1r5g5b5(0);
-						for (size_t i = 0; i < 4; i++) {
-							size_t o = i * 4;
-							w_nib((c & (0x0F << o)) >> o);
-						}
-					}
-			}
-		}
+		enc_par.dispatch<e.w>(glast, gcur, m_data, buf);
 		bool ch = false;
 		auto w_nib = [&](uint8_t v) {
 			if (ch) {
@@ -921,6 +929,7 @@ public:
 		*reinterpret_cast<uint16_t*>(dst_base) = size - 2;
 		return size;
 	}
+	#endif
 
 	void flip(uint8_t *dst)
 	{
