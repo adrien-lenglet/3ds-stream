@@ -265,7 +265,7 @@ int main(int argc, char **argv)
 						}
 						std::memcpy(lastbuf, buf, sizeof(buf));
 						//last_in = in;
-						if (cframe_ndx + 1 >= frame_ndx) {
+						if (cframe_ndx >= frame_ndx) {
 							boost::asio::write(sock, boost::asio::buffer(cmp, cmp_size));
 							frame_ndx++;
 							if (frame_ndx % 60 == 0)
