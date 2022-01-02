@@ -690,9 +690,9 @@ void cmp_pblk(size_t i, const uint8_t *glast, uint8_t *gcur, uint8_t *data, Blks
 			}
 			pp_best_score /= e.blk_px_count;
 			static constexpr size_t max_ind = 64;
-			if (pp_best_score < 64 * 64 &&
-				min(cs[0].max_dst(pp_best[0]), cs[0].max_dst(pp_best[1])) < max_ind &&
-				min(cs[1].max_dst(pp_best[1]), cs[1].max_dst(pp_best[0])) < max_ind) {
+			if (pp_best_score < 64 * 64
+				/*&& min(cs[0].max_dst(pp_best[0]), cs[0].max_dst(pp_best[1])) < max_ind &&
+				min(cs[1].max_dst(pp_best[1]), cs[1].max_dst(pp_best[0])) < max_ind*/) {
 				is_ref = true;
 				ref = 1 + pp_best_ndx;
 				std::memcpy(cs, pp_best, sizeof(cs));

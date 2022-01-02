@@ -175,7 +175,7 @@ int main(int argc, char **argv)
 					auto now = std::chrono::high_resolution_clock::now();
 					auto delta = static_cast<std::chrono::duration<double>>(now - last_frame).count();
 					// pause the game when lag spike kicks in
-					bool is_lag = delta > 0.1;
+					bool is_lag = delta > 0.5;
 					if (is_lag) {
 						XINPUT_STATE state{};
 						state.Gamepad.wButtons = is_paused ? 0 : XINPUT_GAMEPAD_START;
